@@ -1,10 +1,10 @@
 # PROJECT_KICKOFF.md
 
-**Purpose**: Capture everything we need from Bryce before Phase 0 starts. This is the operating contract for the project plus the data inventory plus the unresolved decisions, in one place.
+**Purpose**: Capture everything we need from Allie (the trader this system is being built for) before Phase 0 starts. This is the operating contract for the project plus the data inventory plus the unresolved decisions, in one place.
 
-**How to use**: Bryce fills in every placeholder marked `[FILL IN]`. Sections marked **(required for kickoff)** block Phase 0 if blank. Sections marked **(required for relevant phase)** block that phase only. Doc is signed at the bottom when complete.
+**How to use**: Allie fills in every placeholder marked `[FILL IN]`. Sections marked **(required for kickoff)** block Phase 0 if blank. Sections marked **(required for relevant phase)** block that phase only. Doc is signed at the bottom when complete.
 
-**Estimated time to complete**: 90 minutes if done in one sitting with someone facilitating. 2-3 hours if Bryce fills in solo.
+**Estimated time to complete**: 90 minutes if done in one sitting with someone facilitating. 2-3 hours if Allie fills in solo.
 
 **Status**: `[ ] Draft  [ ] Reviewed  [ ] Signed`
 
@@ -286,7 +286,7 @@ Do you have any historical record of setups you SAW but PASSED on? Screenshots, 
 ### 5.4 GitHub repo
 
 - Repo visibility: `[ ] Private  [ ] Public`
-- Bryce's GitHub handle: `[FILL IN]`
+- Allie's GitHub handle (if she'll touch the repo at all; otherwise N/A): `[FILL IN]`
 
 ---
 
@@ -372,16 +372,16 @@ These are unresolved blockers. Owner and target date for each.
 
 | # | Question | Owner | Target date | Status |
 |---|---|---|---|---|
-| 1 | Setup definitions in falsifiable predicate form (section 3.7) | Bryce | | |
-| 2 | Stop methodology decision (section 3.5) drives primary outcome metric | Bryce | | |
-| 3 | Rule-freeze commitment (section 2.1) | Bryce | | |
-| 4 | M7 NO-GO acceptance and pre-committed next step (section 2.2) | Bryce | | |
-| 5 | Behavioral protocol (section 2.3) | Bryce | | |
-| 6 | External reviewer identified (section 2.6) | Bryce | | |
-| 7 | Sample trade + bar CSVs from NT (section 4.1) | Bryce | | |
-| 8 | Tick data availability confirmed (section 4.2) | Bryce | | |
-| 9 | TradingView plan tier check (section 4.4) | Bryce | | |
-| 10 | Conviction logging commitment (section 4.5) | Bryce | | |
+| 1 | Setup definitions in falsifiable predicate form (section 3.7) | Allie | | |
+| 2 | Stop methodology decision (section 3.5) drives primary outcome metric | Allie | | |
+| 3 | Rule-freeze commitment (section 2.1) | Allie | | |
+| 4 | M7 NO-GO acceptance and pre-committed next step (section 2.2) | Allie | | |
+| 5 | Behavioral protocol (section 2.3) | Allie | | |
+| 6 | External reviewer identified (section 2.6) | Allie | | |
+| 7 | Sample trade + bar CSVs from NT (section 4.1) | Allie | | |
+| 8 | Tick data availability confirmed (section 4.2) | Allie | | |
+| 9 | TradingView plan tier check (section 4.4) | Allie | | |
+| 10 | Conviction logging commitment (section 4.5) | Allie | | |
 
 ---
 
@@ -389,14 +389,14 @@ These are unresolved blockers. Owner and target date for each.
 
 This document represents the operating contract for the project. By signing:
 
-- Bryce confirms the commitments in sections 2 and 6 are real, not aspirational.
-- Bryce confirms the data inventory in section 4 is accurate to best knowledge.
+- Allie confirms the commitments in sections 2 and 6 are real, not aspirational.
+- Allie confirms the data inventory in section 4 is accurate to best knowledge.
 - The development team accepts the constraints and scope.
 - The MVP scope is approved as defined in `DEVELOPMENT_PLAN.md` section 4, modified by any constraints captured here.
 
 Signed:
 
-- **Bryce**: `[NAME]` Date: `[DATE]`
+- **Allie (trader)**: `[NAME]` Date: `[DATE]`
 - **Development lead**: `[NAME]` Date: `[DATE]`
 
 ---
@@ -410,7 +410,7 @@ This document is re-opened (not silently amended) if any of the following occur:
 - Compliance drops below threshold (section 2.4).
 - A new setup is proposed for scope (section 3.7).
 - Vendor pricing changes meaningfully (section 5.1).
-- Bryce's time availability changes by more than 50% (section 6.1).
+- Allie's time availability changes by more than 50% (section 6.1).
 - Hypotheses from section 2.5 disagree sharply with M4 results.
 
 ---
