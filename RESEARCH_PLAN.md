@@ -1,6 +1,6 @@
 # RESEARCH_PLAN.md
 
-**Status**: Draft v0.1, pre-engineering. Requires Bryce sign-off before any code is written.
+**Status**: Draft v0.1, pre-engineering. Requires Allie sign-off before any code is written.
 **Author**: Quant research lead.
 **Companion doc**: `CLAUDE.md` (engineering spec).
 **Scope**: Research design only. No code, no repo layout, no library choices beyond what `CLAUDE.md` already names.
@@ -81,11 +81,11 @@ If we have 200 to 400 trades (the realistic year-one bucket), we are statistical
 
 ### 1.5 Survivorship and selection bias are not addressed
 
-`CLAUDE.md` **Anti-goals** says "everything is computed from price/volume/time." This is correct as a feature constraint. It does not solve the problem that **we are only studying trades Bryce decided to take**.
+`CLAUDE.md` **Anti-goals** says "everything is computed from price/volume/time." This is correct as a feature constraint. It does not solve the problem that **we are only studying trades Allie decided to take**.
 
-The taken-trade dataset has a hidden filter (Bryce's discretion). If a feature like "VWAP distance" was already in his mental rubric, the trades he took will have a restricted range on that feature, and the univariate split will under-estimate its true effect (range restriction, Sackett 1979). Conversely, a feature he ignored may look unusually strong in the taken sample because the strong cases happened to coincide with whatever he *was* looking at (confounding).
+The taken-trade dataset has a hidden filter (Allie's discretion). If a feature like "VWAP distance" was already in her mental rubric, the trades she took will have a restricted range on that feature, and the univariate split will under-estimate its true effect (range restriction, Sackett 1979). Conversely, a feature she ignored may look unusually strong in the taken sample because the strong cases happened to coincide with whatever she *was* looking at (confounding).
 
-The fix is **the counterfactual dataset**: every time the setup logic fires, capture it, regardless of whether Bryce took the trade. The CLAUDE.md spec gestures at this in step 7 (Pine alerts) and step 8 (Sheets) but does not call out that the analytics is fundamentally biased without it. This needs to be the **highest priority milestone in parallel with the historical work**, because each day without forward capture is a day of biased data accumulating.
+The fix is **the counterfactual dataset**: every time the setup logic fires, capture it, regardless of whether Allie took the trade. The CLAUDE.md spec gestures at this in step 7 (Pine alerts) and step 8 (Sheets) but does not call out that the analytics is fundamentally biased without it. This needs to be the **highest priority milestone in parallel with the historical work**, because each day without forward capture is a day of biased data accumulating.
 
 ### 1.6 Multiple-comparisons risk across 25+ features
 
@@ -93,11 +93,11 @@ If we run 25 univariate splits at alpha 0.05, we expect 1.25 false positives by 
 
 ### 1.7 Pine Script historical depth is a hard constraint
 
-`CLAUDE.md` **Build order step 7** proposes Pine Script for real-time capture. Pine has bar-count limits (varies by plan, typically 5,000 to 20,000 bars on screen, lower with `request.security` calls) and `request.security` has well-documented repaint risks on lower-than-chart timeframes. The feature payload sent in the alert must be computed only with confirmed bars (`barstate.isconfirmed`) and only using `lookahead=barmerge.lookahead_off`. This is an implementation detail but it changes what feature set is actually computable in Pine vs. what has to be computed in Python from NinjaTrader exports. Decide before scoping which features live in which engine.
+`CLAUDE.md` **Build order step 7** proposes Pine Script for real-time capture. Pine has bar-count limits (varies by plan, typically 5,000 to 20,000 bars on screen, lower with `request.security` calls) and `request.security` has well-documented repaint risks on lower-than-chart timeframes. The feature payload sent in the alert must be computed only with confirmed bars (`barstate.isconfirmed`) and only using `lookahead=barmerge.lookahead_off`. This is an implementation detail but it changes what feature set is actually computable in Pine vs. what has to be computed in Python from the chosen bar data source. Decide before scoping which features live in which engine.
 
-### 1.8 NinjaTrader's stop and target capture is unreliable for mental stops
+### 1.8 Tradezella's stop and target capture is unreliable for mental stops
 
-`CLAUDE.md` **Trade record schema** lists `stop_price` and `target_price` with the parenthetical "planned, pulled from NT if available, otherwise reconstruct." If Bryce uses mental stops or moves stops on the fly, NT's record will be either missing or post-hoc. R-multiple computation depends on the **intended** stop at entry, not the realized exit. This is an open question to confirm with Bryce (see section 8) and may force us to use forward-return horizons as the primary outcome rather than R.
+`CLAUDE.md` **Trade record schema** lists `stop_price` and `target_price` with the parenthetical "planned, pulled from Tradezella if available, otherwise reconstruct." If Allie uses mental stops, moves stops on the fly, or simply doesn't enter them in Tradezella, the stored record will be missing or post-hoc. R-multiple computation depends on the **intended** stop at entry, not the realized exit. This is an open question to confirm with Allie (see section 8) and may force us to use forward-return horizons as the primary outcome rather than R.
 
 ### 1.9 The rubric promotion criteria are undefined
 
@@ -146,14 +146,14 @@ This is the load-bearing question. A rubric that does not produce A+ > A > B in 
 
 ### Q4 (primary): Does the trader's own pre-trade conviction correlate with ex-post outcome better than chance, and does it agree with the data-derived grade?
 
-If Bryce already grades trades mentally (A+ / A / B), we should test that signal against outcomes before assuming the data-derived rubric is better. It is plausible that his discretion contains information not captured in any rubric we can build.
+If Allie already grades trades mentally (A+ / A / B), we should test that signal against outcomes before assuming the data-derived rubric is better. It is plausible that her discretion contains information not captured in any rubric we can build.
 
 - **H1**: Pre-trade self-graded conviction has IC > 0.10 with forward 30-min return.
 - **H0**: Self-graded conviction is uncorrelated with outcome.
-- **Test**: Spearman rank correlation, requires Bryce to log a 1-5 conviction score on entry going forward. Cannot be done retroactively.
+- **Test**: Spearman rank correlation, requires Allie to log a 1-5 conviction score on entry going forward. Cannot be done retroactively.
 - **Sample required**: 100+ live trades with conviction logged.
 - **Falsified by**: Conviction IC indistinguishable from zero.
-- **Decision**: If H1 holds and IC exceeds data-derived rubric IC, the rubric is downgraded to "decision support" not "decision maker," and we investigate what Bryce sees that the features miss.
+- **Decision**: If H1 holds and IC exceeds data-derived rubric IC, the rubric is downgraded to "decision support" not "decision maker," and we investigate what Allie sees that the features miss.
 
 ### Q5 (primary): Is the edge regime-conditional?
 
@@ -201,25 +201,25 @@ Tests for regime change at the meta level.
 | Per-instrument minimum | 100 trades | If we want per-instrument rubrics. Otherwise pool with instrument as a feature |
 | Per-setup minimum | 100 trades | Same logic. Required if rubric differs by setup. |
 
-**Action item before research begins**: count Bryce's actual trades by month, instrument, and setup. If the table is sparser than the targets above, the research plan needs to be re-scoped (likely toward collecting more data forward rather than mining the past).
+**Action item before research begins**: count Allie's actual trades by month, instrument, and setup. If the table is sparser than the targets above, the research plan needs to be re-scoped (likely toward collecting more data forward rather than mining the past).
 
 ### 3.2 Counterfactual dataset (the part most discretionary trader projects skip)
 
 **Required to address selection bias.** Two sources:
 
-1. **Forward capture from this point on**: every time the Pine setup detector fires, the alert hits the Google Sheet whether Bryce took the trade or not. The sheet schema needs a `taken` boolean and a `reason_not_taken` free-text field (codified to categories after a few weeks).
+1. **Forward capture from this point on**: every time the Pine setup detector fires, the alert hits the Google Sheet whether Allie took the trade or not. The sheet schema needs a `taken` boolean and a `reason_not_taken` free-text field (codified to categories after a few weeks).
 2. **Backward reconstruction**: replay the Pine setup logic over the prior 12 months of bars and emit a setup record for every trigger. Cross-reference against actual trade fills to mark taken vs. not.
 
-The backward reconstruction is the only way to study selection bias on historical data. It depends on the Pine setup detector being a reasonable proxy for Bryce's actual mental criteria, which is itself a question (see open question 4).
+The backward reconstruction is the only way to study selection bias on historical data. It depends on the Pine setup detector being a reasonable proxy for Allie's actual mental criteria, which is itself a question (see open question 4).
 
 ### 3.3 Contamination risks in the historical record
 
 | Risk | Detection | Action |
 |---|---|---|
-| **Rule changes mid-period** | Ask Bryce to list date-stamped rule changes. Visualize R timeline by day. | Subset analysis to stable rule periods, or use rule version as a feature |
+| **Rule changes mid-period** | Ask Allie to list date-stamped rule changes. Visualize R timeline by day. | Subset analysis to stable rule periods, or use rule version as a feature |
 | **Instrument switches** | Count trades per instrument by month | Pool only if statistical tests support pooling |
 | **Sizing changes** (1 lot vs. 3 lot) | Look at qty distribution over time | Normalize by R (already done) but flag any period of qty-driven psych changes |
-| **Account changes** (sim to live, account size jumps) | Ask Bryce. Trade journal entries. | Subset to live-only, or include as covariate |
+| **Account changes** (sim to live, account size jumps) | Ask Allie. Trade journal entries. | Subset to live-only, or include as covariate |
 | **Commission and slippage changes** | Broker statements | Apply current commission to historical to normalize, or use gross R |
 | **Roll contamination** | Front-month switches in NT data | Use continuous-contract construction (back-adjusted or ratio-adjusted) for bars; flag trades within 2 days of roll |
 | **DST and holiday handling** | Inspect timestamps around DST boundaries | Always use UTC internally, convert at display only (CLAUDE.md already says this) |
@@ -416,10 +416,10 @@ Any change failing any of these stays in a branch and does not become canonical.
 | R9 | **Stop placement contamination** of R-multiple | Medium | Medium | Q8 test | Use forward-horizon returns as primary outcome if Q8 confirms |
 | R10 | **Roll contamination** in bar data | Medium | Medium | Visual audit of price series around roll dates | Continuous-contract construction. Flag and possibly exclude trades within 2 days of roll. |
 | R11 | **Pine Script repaint or lookahead** in feature payload | Medium | High | Replay Pine alerts against historical bars and compare to chart values | `barstate.isconfirmed`. `lookahead=barmerge.lookahead_off`. Cross-check Pine values against Python recomputation. |
-| R12 | **Tradezella sync drift** or tag mismatch | Low | Low | Reconcile TZ export with NT export weekly | Tradezella is monitor not source of truth. NT is canonical for fills. |
-| R13 | **Trader rule changes** mid-study | High | High | Quarterly check-in with Bryce, journal review | Subset analysis. Treat rule version as a feature or a partition. |
+| R12 | **Tradezella sync drift** between broker fills and Tradezella record | Low | Medium | Spot-check broker statements vs Tradezella export monthly | Tradezella is canonical for the analysis. If broker integration drops trades, the analysis is wrong upstream. |
+| R13 | **Trader rule changes** mid-study | High | High | Quarterly check-in with Allie, journal review | Subset analysis. Treat rule version as a feature or a partition. |
 | R14 | **Misattribution** of edge to feature vs. confounder | High | Medium | Bivariate analysis; tree-based importance; SHAP | Multivariate validation phase before rubric finalization |
-| R15 | **Counterfactual replay inaccurate** to Bryce's actual mental criteria | Medium | High | Manual review of 30 random replayed setups with Bryce. He labels which he would have taken; compare to setup detector output. | Iterate Pine setup logic until agreement > 85%. Calibration before relying on counterfactual stats. |
+| R15 | **Counterfactual replay inaccurate** to Allie's actual mental criteria | Medium | High | Manual review of 30 random replayed setups with Allie. She labels which she would have taken; compare to setup detector output. | Iterate Pine setup logic until agreement > 85%. Calibration before relying on counterfactual stats. |
 
 ---
 
@@ -436,33 +436,33 @@ Time estimates assume ~half-time effort.
 
 ### M0: Stakeholder alignment and dataset audit (Week 1)
 - **Objective**: Answer the open questions in section 8. Count actual trades by month, instrument, setup.
-- **Inputs**: Bryce's answers. NT trade export. Tradezella export.
-- **Methods**: Read trade log. Tabulate. Interview Bryce.
+- **Inputs**: Allie's answers. Tradezella trade export.
+- **Methods**: Read trade log. Tabulate. Interview Allie.
 - **Deliverable**: `notebooks/00_dataset_audit.ipynb`. Memo of decisions and counts. Updated open questions list.
 - **Decision gate**: Do we have enough taken trades to start (target 200+)? If not, this entire research phase pauses and we go straight to forward-capture infrastructure (M3-only) to accumulate data.
 - **Kill criteria**: <100 taken trades, or fewer than 6 months of consistent rules. In that case, project becomes "build the capture system and revisit in 6 months."
 
 ### M1: Data ingestion and quality (Week 2)
 - **Objective**: Get clean trade and bar dataframes that pass all DQ checks in section 3.4.
-- **Inputs**: NT exports, bar data, possibly Aeromir-exported indicator values.
+- **Inputs**: Tradezella trade export, bar data from the chosen source (`CLAUDE.md` "Stack context"; resolved in `PROJECT_KICKOFF.md` section 4.3).
 - **Methods**: Ingest, normalize, run DQ suite.
 - **Deliverable**: `data/enriched/trades.parquet` (un-enriched yet, just clean trades + bars). DQ report.
 - **Decision gate**: DQ pass rate >= 95%. Below that, fix sources before proceeding.
 
 ### M2: Descriptive baseline and Q1 (Week 3)
-- **Objective**: Answer Q1 (does Bryce have positive expectancy?). Produce baseline metrics.
+- **Objective**: Answer Q1 (does Allie have positive expectancy?). Produce baseline metrics.
 - **Inputs**: M1 output.
 - **Methods**: Descriptive stats, bootstrap CI on mean R, hit rate, payoff, distribution plots.
 - **Deliverable**: Baseline chart pack and memo.
 - **Decision gate**: **Q1 answer**. If 95% CI on mean R excludes zero positively, proceed. If it includes zero, the project changes shape.
-- **Kill criteria**: Mean R 95% CI negative (Bryce is net-losing at current sample). Project pauses for review of whether the strategy itself needs work before grading.
+- **Kill criteria**: Mean R 95% CI negative (Allie is net-losing at current sample). Project pauses for review of whether the strategy itself needs work before grading.
 
 ### M3: Counterfactual capture infrastructure (Weeks 2 to 4, parallel)
 - **Objective**: Stand up Pine setup detector(s) and webhook to Sheet. Backward-replay setup detector over last 12 months of bars.
-- **Inputs**: Bryce's setup definitions (open question 5). 12 months of bar data.
+- **Inputs**: Allie's setup definitions (open question 5). 12 months of bar data.
 - **Methods**: Pine Script implementation. Apps Script webhook receiver. Python replay of setup logic.
 - **Deliverable**: Forward-capture pipeline running. Historical replay dataset of setups (taken + not).
-- **Decision gate**: Setup detector agreement with Bryce on 30 manual-labeled samples >= 85%. If lower, iterate.
+- **Decision gate**: Setup detector agreement with Allie on 30 manual-labeled samples >= 85%. If lower, iterate.
 - **Note**: This runs in parallel because every day without it accrues biased data.
 
 ### M4: Univariate feature analysis (Weeks 4 to 5)
@@ -500,7 +500,7 @@ Time estimates assume ~half-time effort.
 Conditional on M7 = GO. The CLAUDE.md build order takes over from here, with the modification that several research milestones have already produced parquet outputs and notebook artifacts that the engineering work consumes.
 
 ### M9: Forward-test the rubric live (3 months minimum)
-- **Objective**: Validate that the rubric works in real-time, not just on retrospective data. Answer Q4 (does Bryce's intuition agree).
+- **Objective**: Validate that the rubric works in real-time, not just on retrospective data. Answer Q4 (does Allie's intuition agree).
 - **Inputs**: Live setups, live grading, live outcomes.
 - **Methods**: Compare ex-ante grade vs. ex-post outcome. Track expectancy by grade.
 - **Deliverable**: Monthly forward-test report.
@@ -511,7 +511,7 @@ Quarterly re-fit on accumulated data, with promotion criteria from 5.7.
 
 ---
 
-## 8. Open questions to escalate to Bryce (research design only)
+## 8. Open questions to escalate to Allie (research design only)
 
 These are different from the engineering open questions at the end of `CLAUDE.md`. These must be answered before research design is final.
 
@@ -545,7 +545,7 @@ These are different from the engineering open questions at the end of `CLAUDE.md
 
 This document is approved when:
 
-1. Bryce has answered, in writing, all items in section 8.
+1. Allie has answered, in writing, all items in section 8.
 2. The dataset audit (M0) has confirmed the sample size required by section 2 is achievable, or has determined that research is paused for forward capture.
 3. The risks in section 6 are accepted, and the mitigations are agreed to as binding.
 4. The go/no-go criterion in M7 is accepted as a real gate that can return a "no go" without it being a failure of the research lead.
@@ -567,4 +567,4 @@ If any of those four is not done, the plan is not approved.
 
 ---
 
-*End of plan. Awaiting Bryce sign-off and answers to section 8.*
+*End of plan. Awaiting Allie sign-off and answers to section 8.*

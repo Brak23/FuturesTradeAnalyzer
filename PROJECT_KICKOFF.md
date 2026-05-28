@@ -2,9 +2,15 @@
 
 **Purpose**: Capture everything we need from Allie (the trader this system is being built for) before Phase 0 starts. This is the operating contract for the project plus the data inventory plus the unresolved decisions, in one place.
 
-**How to use**: Allie fills in every placeholder marked `[FILL IN]`. Sections marked **(required for kickoff)** block Phase 0 if blank. Sections marked **(required for relevant phase)** block that phase only. Doc is signed at the bottom when complete.
+**Project context**:
+- **Allie** is the trader. ~1 year of experience, primary instruments MNQ and NQ, logs trades in Tradezella. Has ADHD. End consumer of the reports and grades.
+- **Bryce** is sole developer and project owner. Builds and maintains the pipeline. Not the trader.
 
-**Estimated time to complete**: 90 minutes if done in one sitting with someone facilitating. 2-3 hours if Allie fills in solo.
+**How to use**: Allie fills in every placeholder marked `[FILL IN]`. Bryce facilitates and answers any technical questions. Sections marked **(required for kickoff)** block Phase 0 if blank. Sections marked **(required for relevant phase)** block that phase only. Doc is signed at the bottom when complete.
+
+**Estimated time to complete**: 90 minutes if Bryce facilitates a single sitting. 2-3 hours if Allie fills in solo and Bryce reviews after.
+
+**Report/UX note**: Allie has ADHD. Every artifact she consumes (HTML reports, dashboards, alerts) needs to be visually scannable: short sections, color-coded, conclusion-first, no dense tables-of-numbers as the primary view. Dense detail is fine BELOW the summary, not as the lead.
 
 **Status**: `[ ] Draft  [ ] Reviewed  [ ] Signed`
 
@@ -136,17 +142,20 @@ For each period in the last 12 months, mark account type. Affects whether trades
 
 ### 3.4 Instruments
 
-Check all you've traded in the last 12 months and rank by trade count.
+Default scope for MVP is MNQ and NQ (pre-confirmed in kickoff context). Confirm and add detail.
 
-- [ ] ES (E-mini S&P)
-- [ ] MES (Micro E-mini S&P)
-- [ ] NQ (E-mini Nasdaq)
-- [ ] MNQ (Micro Nasdaq)
-- [ ] CL (Crude)
-- [ ] GC (Gold)
+- [ ] Confirmed: MNQ + NQ only for MVP.
+- [ ] Modify: also include `[FILL IN]`
+- [ ] Modify: only `[FILL IN]` (drop NQ or MNQ)
+
+Approximate split MNQ vs NQ in last 12 months:
+- MNQ: `[FILL IN]` % of trades
+- NQ: `[FILL IN]` % of trades
+
+Do you treat MNQ and NQ as the same setup with different sizing, or do you trade them differently?
+- [ ] Same setup, different size (pool in analysis)
+- [ ] Different (separate rubrics or separate analysis)
 - [ ] Other: `[FILL IN]`
-
-Primary instrument(s) for MVP scope (1-3 max): `[FILL IN]`
 
 ### 3.5 Stop placement methodology (highest priority unknown)
 
@@ -218,42 +227,77 @@ Factors you refuse to grade on for any reason, even if data says they matter.
 
 ## 4. Data inventory **(required for Phase 1)**
 
-### 4.1 NinjaTrader
+### 4.1 Tradezella (canonical source for trade fills)
 
-- NT8 build number: `[FILL IN]`
-- Earliest fill date in your NT database: `[FILL IN]`
-- Have you ever cleared/reset the NT db? If so when: `[FILL IN]`
-- Can you provide a sample trade export CSV (last 30 days): `[ ] Attached  [ ] To do by [date]`
-- Can you provide a sample bar export CSV: `[ ] Attached  [ ] To do by [date]`
+- Tradezella plan tier: `[ ] Free  [ ] Premium  [ ] Other: [FILL IN]`
+- Earliest trade date logged in Tradezella: `[FILL IN]`
+- Approximate total trades logged: `[FILL IN]`
+- Have you ever cleared/reset Tradezella history? When: `[FILL IN]`
+- Can you provide a sample CSV export (last 30 days): `[ ] Attached  [ ] To do by [date]`
+- Field completeness check, do these export reliably for every trade:
+  - Entry/exit timestamp with timezone: `[ ] Yes  [ ] Sometimes  [ ] No`
+  - Planned stop price: `[ ] Yes  [ ] Sometimes  [ ] No`
+  - Planned target price: `[ ] Yes  [ ] Sometimes  [ ] No`
+  - Commission: `[ ] Yes  [ ] Sometimes  [ ] No`
+- Existing tag taxonomy in use:
+  - [ ] Yes, paste current tags: `[FILL IN]`
+  - [ ] Minimal: `[FILL IN]`
+  - [ ] None
+- Existing custom fields (notes, mood, conviction, etc.): `[FILL IN]`
 
-### 4.2 Tick data
+### 4.2 Broker / execution platform
 
-Order flow features (cumulative delta, large lot ratio) require tick data.
+What do you actually click buy/sell in?
 
-- Do you have tick-level history in NT, or only minute bars: `[ ] Tick available since [date]  [ ] Minute bars only`
-- If tick available, approximate coverage: `[FILL IN]`
+- [ ] NinjaTrader 8 (then Tradezella syncs from NT)
+- [ ] Tradovate (direct)
+- [ ] TopstepX
+- [ ] AMP Futures
+- [ ] Other: `[FILL IN]`
 
-### 4.3 Tradezella
+How does data flow into Tradezella:
+- [ ] Auto-sync (which integration): `[FILL IN]`
+- [ ] Manual CSV upload
+- [ ] Other: `[FILL IN]`
 
-- Account exists: `[ ] Yes  [ ] No`
-- Existing tag taxonomy in use: `[ ] Yes (paste below)  [ ] No  [ ] Minimal`
-  - If yes, current tags: `[FILL IN]`
+### 4.3 Bar data source (open architectural question)
 
-### 4.4 TradingView
+Tradezella stores trade fills but NOT OHLCV bars or tick data. We need a source for the bar context around each entry to compute features. Options:
+
+- [ ] **NinjaTrader 8** (free if Allie uses it for execution; stores historical bars locally). NT8 build: `[FILL IN if applicable]`
+- [ ] **TradingView export** (chart-by-chart manual export; limited history and granularity)
+- [ ] **Broker API** (Tradovate, etc., if available): `[FILL IN]`
+- [ ] **Paid data feed** (Databento ~$100/mo, Polygon, CQG): `[FILL IN]`
+- [ ] **None of the above** (this is a blocker; resolve before Phase 1)
+
+Preferred source for MVP: `[FILL IN]`
+
+### 4.4 Tick data
+
+Order flow features (cumulative delta, large lot ratio, bid/ask) require tick-level data. They are NOT required for MVP but they unlock the "added" feature categories in CLAUDE.md.
+
+- Do you have tick-level history from any source: `[ ] Yes since [date]  [ ] No  [ ] Forward-only from when capture is enabled`
+- If yes, source: `[FILL IN]`
+- Acceptable to defer order flow features to post-MVP: `[ ] Yes  [ ] No, must include`
+
+### 4.5 TradingView
 
 - Plan tier: `[ ] Free  [ ] Pro  [ ] Pro+  [ ] Premium`
-- Note: Premium ($60/mo) required for webhook alerts to URLs. If not on Premium, webhook plan needs to change.
+- Note: Premium ($60/mo) required for webhook alerts to URLs. If not on Premium AND we want real-time Pine alerts, plan needs to change. For deep-analysis-only MVP, TradingView Free may be sufficient.
 
-### 4.5 Conviction logging
+### 4.6 Conviction logging
 
-Will you commit to logging a 1-5 pre-trade conviction score on EVERY trade going forward (5 seconds per trade)? Required for Q4 in RESEARCH_PLAN.md.
+Will Allie commit to logging a 1-5 pre-trade conviction score on EVERY trade going forward (5 seconds per trade)? Required for Q4 in RESEARCH_PLAN.md.
 
-- [ ] Yes
-- [ ] No (Q4 is dropped from research scope)
+Practically: add a custom field in Tradezella for conviction, OR write it into the trade note before clicking buy.
 
-### 4.6 Historical setup records
+- [ ] Yes, via Tradezella custom field
+- [ ] Yes, via trade note
+- [ ] No (Q4 dropped from research scope)
 
-Do you have any historical record of setups you SAW but PASSED on? Screenshots, journal entries, screen recordings. Even partial helps bound counterfactual replay validation.
+### 4.7 Historical setup records
+
+Does Allie have any historical record of setups SEEN but PASSED on? Screenshots, journal entries, screen recordings. Even partial helps bound counterfactual replay validation.
 
 - [ ] Yes, format: `[FILL IN]`
 - [ ] No
@@ -277,16 +321,17 @@ Do you have any historical record of setups you SAW but PASSED on? Screenshots, 
 | Funded account fees | `[FILL IN]` | |
 | Other | `[FILL IN]` | |
 
-### 5.3 Google account for Sheet + Apps Script
+### 5.3 Google account for Sheet + Apps Script (only needed if real-time Pine alerts in scope)
 
 - Account to use: `[FILL IN]`
-- Owner of the sheet: `[FILL IN]`
-- Permissions model: `[FILL IN: just me / shared with X]`
+- Owner of the sheet: `[FILL IN: Bryce / Allie / shared]`
+- Permissions model: `[FILL IN]`
 
 ### 5.4 GitHub repo
 
 - Repo visibility: `[ ] Private  [ ] Public`
-- Allie's GitHub handle (if she'll touch the repo at all; otherwise N/A): `[FILL IN]`
+- Repo owner: Bryce (sole dev).
+- Does Allie need any read access (to look at outputs in the repo): `[ ] Yes  [ ] No, she only consumes reports outside the repo`
 
 ---
 
@@ -375,13 +420,15 @@ These are unresolved blockers. Owner and target date for each.
 | 1 | Setup definitions in falsifiable predicate form (section 3.7) | Allie | | |
 | 2 | Stop methodology decision (section 3.5) drives primary outcome metric | Allie | | |
 | 3 | Rule-freeze commitment (section 2.1) | Allie | | |
-| 4 | M7 NO-GO acceptance and pre-committed next step (section 2.2) | Allie | | |
+| 4 | M7 NO-GO acceptance and pre-committed next step (section 2.2) | Allie + Bryce | | |
 | 5 | Behavioral protocol (section 2.3) | Allie | | |
-| 6 | External reviewer identified (section 2.6) | Allie | | |
-| 7 | Sample trade + bar CSVs from NT (section 4.1) | Allie | | |
-| 8 | Tick data availability confirmed (section 4.2) | Allie | | |
-| 9 | TradingView plan tier check (section 4.4) | Allie | | |
-| 10 | Conviction logging commitment (section 4.5) | Allie | | |
+| 6 | External reviewer identified (section 2.6) | Bryce | | |
+| 7 | Sample Tradezella export CSV (section 4.1) | Allie | | |
+| 8 | Broker / execution platform confirmed (section 4.2) | Allie | | |
+| 9 | Bar data source decided (section 4.3) — architectural blocker | Bryce + Allie | | |
+| 10 | Tick data availability confirmed (section 4.4) | Allie | | |
+| 11 | TradingView plan tier check (section 4.5) | Allie | | |
+| 12 | Conviction logging commitment (section 4.6) | Allie | | |
 
 ---
 

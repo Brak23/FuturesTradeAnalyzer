@@ -1,24 +1,26 @@
 # DEVELOPMENT_PLAN.md
 
 **Role**: Full stack developer planning doc.
-**Inputs**: `CLAUDE.md` (engineering spec), `RESEARCH_PLAN.md` (statistical methodology and gates).
-**Audience**: Bryce + future implementers.
-**Status**: Draft v0.1. Not approved. Pending answers to engineering open questions in `CLAUDE.md` and research open questions in `RESEARCH_PLAN.md` section 8.
+**Inputs**: `CLAUDE.md` (engineering spec), `RESEARCH_PLAN.md` (statistical methodology and gates), `PROJECT_KICKOFF.md` (pre-Phase-0 operating contract).
+**Audience**: Bryce (sole developer) + any future implementer.
+**End consumer of the system**: Allie (the trader; ~1 yr experience, MNQ/NQ, logs in Tradezella, has ADHD).
+**Status**: Draft v0.2. Not approved. Pending signed `PROJECT_KICKOFF.md`.
 
 ---
 
 ## 0. TL;DR
 
-This is a **data + analytics product**, not a SaaS app. There is no end-user UI in the traditional sense. The "users" are:
+This is a **data + analytics product** Bryce builds for Allie. There is no traditional UI. The actors are:
 
-1. **Bryce** consuming HTML/markdown reports and CSV/parquet outputs.
-2. **TradingView** firing webhooks at a Google Sheet.
-3. **NinjaTrader** producing CSV exports.
-4. **Tradezella** receiving tag suggestions for outcome tracking.
+1. **Allie (end consumer)** — reads HTML reports designed for ADHD-friendly scanning; her tags/custom fields in Tradezella become the system's vocabulary.
+2. **Bryce (developer + maintainer)** — runs the pipeline, reviews technical correctness, owns CI / repo / dependency management.
+3. **Tradezella** — canonical source for trade fills; also possible sink for tag suggestions.
+4. **Bar data source (TBD)** — supplies OHLCV for feature computation. NT, broker API, TradingView export, or paid feed; resolved in `PROJECT_KICKOFF.md` section 4.3 before Phase 1.
+5. **TradingView (post-MVP)** — Pine Script setup detection and real-time webhook capture, only after Phase 6.
 
-The product is the **pipeline + the rubric YAML + the HTML reports**. Everything else is plumbing.
+The product is the **pipeline + the rubric YAML + the reports Allie actually reads**. Everything else is plumbing.
 
-**MVP definition** (Phase 6 below): A reproducible pipeline that ingests Bryce's NT trade history, computes a minimal feature set with point-in-time discipline, answers Q1 (positive expectancy?), runs FDR-corrected univariate analytics, produces rubric v1 YAML, and validates v1 via rolling-origin walk-forward. The MVP is "successful" whether the walk-forward gate passes or fails. A "no go" outcome that prevents shipping a noise-rubric is a positive result.
+**MVP definition** (Phase 6 below): A reproducible pipeline that ingests Allie's Tradezella trade history, computes a minimal feature set against bars from the chosen data source with point-in-time discipline, answers Q1 (positive expectancy?), runs FDR-corrected univariate analytics, produces rubric v1 YAML, validates v1 via rolling-origin walk-forward, and renders an ADHD-friendly HTML report Allie can read. The MVP is "successful" whether the walk-forward gate passes or fails. A "no go" outcome that prevents shipping a noise-rubric is a positive result.
 
 **Estimated MVP effort**: 7-9 weeks at half-time pace, matching RESEARCH_PLAN.md milestones M0-M7.
 
@@ -111,7 +113,7 @@ Already specified in `CLAUDE.md`. No deviations. Confirming the additions this p
 4. **Deterministic outputs.** Every analytics run records inputs hash + git SHA + seed + rubric version in the report header (per CLAUDE.md coding standards). Re-running the same command on the same inputs reproduces identical output.
 5. **Kill criteria are real.** Each milestone in `RESEARCH_PLAN.md` M0-M7 has an explicit kill criterion. If one fires, the project stops and re-scopes. We do not soften the criterion to keep building.
 6. **No premature abstraction.** First feature in each category is concrete and inline. Abstract base classes / strategy patterns appear only when the second and third features prove the pattern. Three concrete is better than premature.
-7. **Reports are the deliverable.** A passing test suite is necessary but not sufficient. Every milestone produces a markdown or HTML report with the actual numbers. The report is what Bryce reviews.
+7. **Reports are the deliverable.** A passing test suite is necessary but not sufficient. Every milestone produces a markdown or HTML report with the actual numbers. Bryce reviews for technical correctness; Allie reads the report-for-trader version. If a report is so dense Allie won't read it, it doesn't count as shipped (see `CLAUDE.md` "How to design outputs for Allie").
 
 ### 2.2 Branching and commits
 
@@ -145,7 +147,8 @@ Property-based tests via `hypothesis` for any feature that takes numeric inputs:
 
 ### 2.5 Documentation
 
-- `README.md` — onboarding for Bryce and any helper. How to install, ingest, run analytics, read reports.
+- `README.md` — Bryce's developer onboarding. How to install, ingest, run analytics, render reports. Not consumed by Allie.
+- `READING_THE_REPORT.md` (post-Phase-4) — short, plain-language guide for Allie on how to interpret the HTML output.
 - `CLAUDE.md` — engineering spec (existing).
 - `RESEARCH_PLAN.md` — methodology (existing).
 - `DEVELOPMENT_PLAN.md` — this doc.
@@ -180,22 +183,23 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 **Goal**: Know what data we have before writing more code.
 
 **Tasks**:
-- Manual export of NT trades CSV and bars CSV (Bryce; needs his hands).
-- Place under `data/raw/ninjatrader/`.
-- `notebooks/00_dataset_audit.ipynb`: count trades by month, instrument, setup, account context. Plot timeline. Identify rule-change dates.
+- Allie exports trades CSV from Tradezella (last 12 months, all instruments, all fields). Place under `data/raw/tradezella/`.
+- If bar data source per `PROJECT_KICKOFF.md` section 4.3 is NT, Allie also exports bars. Otherwise stub the bar fetch interface and defer until that source is wired in Phase 2.
+- `notebooks/00_dataset_audit.ipynb`: count trades by month, instrument (MNQ vs NQ), setup, account context. Plot timeline. Identify rule-change dates.
 - Memo: `data/reports/M0_dataset_audit.md`.
 
-**Kill criterion**: <100 taken trades or <6 months of consistent rules. If hit, project pauses; only forward-capture (Phase 3) proceeds.
+**Kill criterion**: <100 taken trades or <6 months of consistent rules. If hit, project pauses; only counterfactual / forward-capture (Phase 3) proceeds.
 
 ### Phase 2 — M1 Ingest + DQ (Week 2)
 
 **Goal**: Clean trade and bar dataframes that pass all 10 DQ checks.
 
 **Tasks**:
-- `src/ingest/ninjatrader.py`: parse NT trades CSV + bars CSV into pydantic-validated DataFrames. UTC normalization. Symbol-root extraction.
+- `src/ingest/tradezella.py`: parse Tradezella CSV export into pydantic-validated DataFrames. UTC normalization. Symbol-root extraction. Map Allie's existing tags/custom fields into the trade record.
+- `src/ingest/bars.py`: bar loader for the chosen source (NT CSV, broker API, TradingView export, or paid feed adapter). Interface designed so the source can be swapped without touching downstream code.
 - `src/dq/checks.py`: implement all 10 DQ checks per CLAUDE.md.
-- `src/dq/report.py`: produce DQ report (HTML + markdown).
-- Tests: fixture CSVs covering happy path + each DQ failure mode.
+- `src/dq/report.py`: produce DQ report (HTML + markdown) with the ADHD-friendly layout from `CLAUDE.md` "How to design outputs for Allie."
+- Tests: fixture CSVs covering happy path + each DQ failure mode for Tradezella + the chosen bar source.
 - `just ingest` and `just dq` work end to end.
 
 **Deliverable**: `data/enriched/trades_clean.parquet`, `data/enriched/bars_clean.parquet`, `data/reports/M1_dq_report.html`.
@@ -214,15 +218,15 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 - **Apps Script webhook receiver** (`webhook/apps_script.gs`):
   - Parses alert JSON.
   - Appends row to Google Sheet with columns matching the setup observation record schema.
-  - Adds `taken` boolean (default false; Bryce updates after the trading day) and `reason_not_taken` (free text initially).
+  - Adds `taken` boolean (default false; Allie updates after the trading day) and `reason_not_taken` (free text initially).
 - **Backward replay** (`src/ingest/tradingview.py` + a `scripts/replay_setups.py`):
   - Reapply setup logic over 12 months of bars in Python (mirror of Pine logic).
-  - Cross-reference against actual trade fills to mark `taken`.
-- **Detector calibration**: 30 manually-labeled setups from Bryce, compare to detector output, iterate until agreement >= 85%.
+  - Cross-reference against actual Tradezella fills to mark `taken`.
+- **Detector calibration**: 30 manually-labeled setups from Allie, compare to detector output, iterate until agreement >= 85%.
 
 **Deliverable**: Sheet receiving live alerts; `data/enriched/setup_observations.parquet` from backward replay.
 
-**Kill criterion**: Detector agreement <85% after 3 iterations. Re-scope setup definition with Bryce.
+**Kill criterion**: Detector agreement <85% after 3 iterations. Re-scope setup definition with Allie.
 
 ### Phase 4 — M2 Expectancy baseline + MVP features (Weeks 3-4)
 
@@ -295,10 +299,10 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 
 **Tasks**:
 - Add live grading to the Pine setup detector (compute rubric score in Pine, include in alert).
-- Sheet captures pre-trade grade + Bryce's actual decision + 1-5 conviction (if Q4 committed to in open question 7).
-- Weekly join: alert grade + actual trade outcome.
-- Monthly forward-test report (`scripts/forward_test_report.py`): expectancy by grade vs walk-forward expectations; CI overlap check.
-- Tradezella tag export (`src/reports/tradezella_export.py`): emit suggested tags per trade for Bryce to apply.
+- Sheet captures pre-trade grade + Allie's actual decision + 1-5 conviction (if Q4 committed to in open question 7).
+- Weekly join: alert grade + actual Tradezella trade outcome.
+- Monthly forward-test report (`scripts/forward_test_report.py`): expectancy by grade vs walk-forward expectations; CI overlap check. Rendered in ADHD-friendly layout for Allie.
+- Tradezella tag export (`src/reports/tradezella_export.py`): emit suggested tags per trade for Allie to apply (or auto-apply via Tradezella API if available).
 
 **Deliverable**: monthly report; tag suggestions; conviction log.
 
@@ -360,7 +364,7 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 - Trader state features.
 - SHAP / ML importance analysis (M9 territory).
 - Tradezella tag automation.
-- Conviction logging integration (depends on Bryce's commitment in open question 7).
+- Conviction logging integration (depends on Allie's commitment in open question 7).
 - Real-time live grading in production trading.
 - Any UI beyond HTML reports.
 - Notifications / alerts to phone.
@@ -370,7 +374,7 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 ### 4.3 MVP success criteria
 
 The MVP is successful when **all** hold:
-1. `just ingest && just dq && just features && just analyze && just report` runs end to end on Bryce's actual trade history.
+1. `just ingest && just dq && just features && just analyze && just report` runs end to end on Allie's actual Tradezella trade history.
 2. All milestone memos (M0-M7) produced with timestamps, sample sizes, # of tests run, FDR alpha, git SHA in every header.
 3. Test suite passes; coverage >= 80%; CI green.
 4. M7 walk-forward report exists and contains an explicit "GO" or "NO GO" verdict with the 7 promotion criteria checked.
@@ -390,8 +394,8 @@ Ranked by **value × ease**, not just one or the other.
 | E1 | **Forward-capture sheet fully wired** with codified `reason_not_taken` categories | Counterfactual dataset enrichment; selection-bias correction strength |
 | E2 | **Full order flow feature set** (delta divergence, large lot ratio, bid/ask spread regime) | RESEARCH_PLAN.md section 1.1 high-priority features; may unlock rubric v2 |
 | E3 | **Live grading in Pine Script** matching the YAML rubric, included in alert payload | Real-time A+/A/B determination at signal time; required for Q4 forward-test |
-| E4 | **Quarterly auto-refit** harness with promotion-criteria check | Removes Bryce's manual loop; makes refinement cheap |
-| E5 | **HTML dashboard** (single page summarizing latest rubric, recent OOS, current sample size, current detectable effect size) | Bryce's daily glance; replaces ad-hoc notebook re-runs |
+| E4 | **Quarterly auto-refit** harness with promotion-criteria check | Removes Bryce's manual refit loop; makes refinement cheap |
+| E5 | **HTML dashboard** (one-screen visual summary of latest rubric, recent OOS, sample size, detectable effect size; ADHD-friendly per CLAUDE.md) | Allie's daily glance; primary consumption surface |
 
 ### 5.2 Medium value
 
@@ -414,7 +418,7 @@ Ranked by **value × ease**, not just one or the other.
 | E15 | Mobile journal entry app | Capture context the system can't observe (mood, sleep). Risk: subjective fields polluting dataset. |
 | E16 | Slack / Discord notification on A+ setups firing | Convenience. Risk: behavioral coupling reduces ability to forward-test. |
 | E17 | Web UI (Streamlit or FastAPI) replacing notebooks | Convenience only. Notebooks already work for the audience size of 1. |
-| E18 | Cloud-scheduled re-runs (Cloud Run + Cloud Scheduler) | Only useful if Bryce stops opening his laptop. |
+| E18 | Cloud-scheduled re-runs (Cloud Run + Cloud Scheduler) | Only useful if reports need to land in Allie's inbox without Bryce running the pipeline manually. Defer until weekly cadence is real. |
 | E19 | Multi-account / multi-trader support | YAGNI for a single-trader system. |
 | E20 | Live broker integration / automated execution | Anti-goal in CLAUDE.md. Do not build. |
 
@@ -429,7 +433,7 @@ This complements RESEARCH_PLAN.md section 6 (statistical risks). Engineering-spe
 | ER1 | NinjaTrader CSV schema drift between versions | Medium | Medium | Pydantic ingest layer fails loudly; pin NT version in README; add new test fixture per schema change |
 | ER2 | Pine Script repaint despite `barstate.isconfirmed` (e.g., bug in custom indicator) | Medium | High | R11 in RESEARCH_PLAN.md; cross-validate Pine output against Python recomputation on overlap window |
 | ER3 | Google Sheet quota / Apps Script trigger limits hit | Low | Medium | Apps Script has 90-min/day quota on free tier; monitor; fall back to direct webhook → small Flask app on Cloud Run if hit |
-| ER4 | Tick data unavailable for backfilling order flow features | High | Medium | NT only stores tick data going forward from when capture was enabled; check what Bryce has. If gap, accept that order flow features are forward-only |
+| ER4 | Tick data unavailable for backfilling order flow features | High | Medium | Depends on bar/tick data source per `PROJECT_KICKOFF.md` section 4.4. If Allie has no historical tick data, accept that order flow features are forward-only |
 | ER5 | Notebook outputs check in to git | Medium | Low | `.gitignore` patterns; pre-commit hook to strip outputs (`nbstripout`) |
 | ER6 | Magic numbers leak back into feature code | Medium | Medium | Lint rule (custom ruff or grep in CI) flagging numeric literals outside `src/config.py` |
 | ER7 | Test data fixtures diverge from real NT format | Medium | Medium | Re-generate fixtures from real exports quarterly; document the generation script in `tests/fixtures/README.md` |
@@ -443,8 +447,9 @@ This complements RESEARCH_PLAN.md section 6 (statistical risks). Engineering-spe
 
 Already escalated in CLAUDE.md and RESEARCH_PLAN.md. Restating the ones that block development:
 
-1. **NT export format on Bryce's version**: need a sample CSV before writing the ingest parser.
-2. **Tick data availability**: does Bryce have tick-level history for order flow features, or only minute bars?
+1. **Tradezella export schema**: need a sample CSV from Allie's account before writing the ingest parser. Field coverage (esp. planned stop, commission) varies by broker integration.
+2. **Bar data source decision** (`PROJECT_KICKOFF.md` section 4.3): NT / broker API / TradingView export / paid feed. Blocks Phase 1.
+3. **Tick data availability**: does Allie have tick-level history (from NT or otherwise) for order flow features, or only minute bars?
 3. **Google account for Sheet + Apps Script**: which account, who owns the sheet, what's the share permission model.
 4. **TradingView plan**: Free / Pro / Pro+ / Premium affects bar count limit, alerts/month limit, webhook availability. Premium required for webhook alerts.
 5. **NinjaTrader version** (NT8 confirmed in spec, but need build number; affects export schema).
@@ -456,7 +461,7 @@ Already escalated in CLAUDE.md and RESEARCH_PLAN.md. Restating the ones that blo
 ## 8. Acceptance for this plan
 
 Plan is approved when:
-1. Bryce confirms the MVP scope in section 4 matches his expectation.
+1. Allie + Bryce confirm the MVP scope in section 4 matches expectations (Allie on what the system needs to tell her; Bryce on what he can sustain to build).
 2. Engineering open questions in section 7 are answered (or accepted as risk).
 3. Phase ordering is agreed, especially that Phase 3 runs parallel to Phase 2 and 4.
 4. Half-time pace (7-9 weeks) is accepted, or the timeline is renegotiated.
@@ -464,4 +469,4 @@ Plan is approved when:
 
 ---
 
-*End of plan. Awaiting Bryce sign-off.*
+*End of plan. Awaiting signed `PROJECT_KICKOFF.md` from Allie + Bryce.*

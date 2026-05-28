@@ -2,25 +2,34 @@
 
 ## Project purpose
 
-Build a repeatable, data-driven analytics system that takes a working-but-mushy futures trading strategy and empirically defines what separates A+ setups from A setups from B setups. The system must:
+Build a repeatable, data-driven analytics system that takes Allie's working-but-mushy futures trading and empirically defines what separates A+ setups from A setups from B setups. Primary framing is **deep post-hoc analysis of Allie's Tradezella-logged trades**; a real-time grading rubric is a possible later output but not the MVP centerpiece. The system must:
 
-1. Ingest historical trade data and market context automatically.
+1. Ingest Allie's trade history from Tradezella (canonical source) plus bar/market context from a TBD bar-data source.
 2. Enrich every trade with 25-30 objectively-measured features computed strictly at entry time (point-in-time discipline, see section "Point-in-time discipline").
 3. Run edge-discovery analytics (univariate IC + expectancy lift with FDR correction, MFE/MAE distributions, bivariate interactions, rolling-origin walk-forward) to identify which factors actually drive forward returns.
 4. Produce a weighted grading rubric derived from data, not intuition, capped at 8 features and stored as versioned YAML.
-5. Capture real-time setup observations going forward (including setups not taken) so the dataset is not biased by Bryce's discretion.
+5. Capture setup observations going forward (including setups not taken) so the dataset is not biased by Allie's discretion. Real-time capture in scope only after Phase 6 MVP; backward replay is required earlier.
 
-The user is ~1 year into futures trading, treats this as a quant problem, and refuses to do manual chart review when a script can do it. He is a Senior IT PM and Platform Architect; treat him as a technical peer.
+### Project roles
 
-**Companion document**: `RESEARCH_PLAN.md`. CLAUDE.md is the engineering spec; RESEARCH_PLAN.md is the statistical methodology and acceptance gates. Any conflict between the two resolves in favor of RESEARCH_PLAN.md until that doc is amended.
+- **Allie**: the trader. ~1 year of futures experience, trades MNQ and NQ primarily, logs every trade in Tradezella. Has ADHD. End consumer of the reports, grades, and any dashboards. Owner of all trading-domain decisions (setup definitions, behavioral protocols, conviction logging commitment).
+- **Bryce**: sole developer and project owner. Builds and maintains the pipeline. Not the trader. Owns architectural and scope decisions; defers to Allie on trading-domain questions.
+
+**Companion documents**:
+- `RESEARCH_PLAN.md`: statistical methodology and acceptance gates.
+- `DEVELOPMENT_PLAN.md`: phased build plan, MVP scope, enhancement backlog.
+- `PROJECT_KICKOFF.md`: pre-Phase-0 operating contract; must be signed by Allie + Bryce before code is written.
+
+Any conflict between CLAUDE.md and RESEARCH_PLAN.md resolves in favor of RESEARCH_PLAN.md until that doc is amended.
 
 ## Stack context
 
-- **NinjaTrader 8** — primary execution platform. Source of trade fills, historical tick/minute futures data. Stored locally in `Documents/NinjaTrader 8/db/`. Exports go to CSV (UTF-8, UTC timestamps, 3-month max blocks via UI).
-- **TradingView** — primary analysis platform. Pine Script v6 for feature computation and setup detection. Webhook alerts for real-time capture. Subject to bar-count limits and `request.security` repaint risks (see section "Pine Script constraints").
-- **Tradezella** — outcome dashboard. Auto-syncs from NinjaTrader. Holds Strategy field, tag categories (Strategy, Grade, Confluence, Mistake, Context), and reporting. Not the source of analytical truth; it is a monitor on top of the lab. NT export is canonical for fills.
+- **Tradezella** — **canonical source for trade fills** (entries, exits, P&L, Allie's tags and notes). All historical trade data flows in from here via CSV export. Holds Strategy field, tag categories (Strategy, Grade, Confluence, Mistake, Context), custom fields, and reporting UI Allie already uses. Stop and target prices may or may not be reliably populated; verified in `PROJECT_KICKOFF.md` section 4.1.
+- **Bar data source** — **TBD architectural decision** (`PROJECT_KICKOFF.md` section 4.3). Options: NinjaTrader 8 (if Allie uses it for execution), broker API (Tradovate / TopstepX / AMP), TradingView export, or a paid feed (Databento, Polygon). Required for feature computation; Tradezella does not store OHLCV. **This is a Phase-1 blocker.**
+- **NinjaTrader 8** — possible bar data source AND possible execution platform; not assumed. If Allie uses NT, bar data is local (`Documents/NinjaTrader 8/db/`) and free. If she does not, NT is out of scope.
+- **TradingView** — analysis platform. Pine Script v6 for setup detection and (post-MVP) real-time alert capture. Subject to bar-count limits and `request.security` repaint risks (see section "Pine Script constraints"). Premium tier ($60/mo) required for webhook alerts; not required for analysis-only MVP.
 - **Python 3.11+** — analysis layer. pandas, polars, scikit-learn, shap, matplotlib/plotly, jupyter. Bootstrap and permutation tests use numpy with explicit seeds.
-- **Google Sheets + Apps Script** — real-time webhook receiver for TradingView alerts. Free, no Zapier.
+- **Google Sheets + Apps Script** — webhook receiver for TradingView alerts. Only needed if real-time capture is in scope (post-MVP under current "deep analysis" framing).
 
 ## Architecture
 
@@ -186,7 +195,7 @@ Required fields from NinjaTrader export, normalized:
 - `roll_proximity_days` (int; bars within 2 days of front-month switch flagged)
 - `account_context` (enum: "live", "sim", "funded_challenge", etc.; from journal)
 
-**Stop placement caveat**: if Bryce uses mental stops, NT will not have a reliable `stop_price`. R-multiple computation then depends on a post-hoc reconstruction, which biases the metric. When `stop_type = "mental"` and stop is not journaled, the primary outcome shifts to forward-horizon returns (see "Outcome record") rather than R. This is engineering open question 6 and is highest priority to resolve with Bryce.
+**Stop placement caveat**: if Allie uses mental stops or doesn't log them in Tradezella, the trade record will not have a reliable `stop_price`. R-multiple computation then depends on a post-hoc reconstruction, which biases the metric. When `stop_type = "mental"` and stop is not journaled, the primary outcome shifts to forward-horizon returns (see "Outcome record") rather than R. This is engineering open question 6 and is highest priority to resolve with Allie via `PROJECT_KICKOFF.md` section 3.5.
 
 ### Enriched trade record
 Above + ~25-30 feature columns. Naming convention: `feat_<domain>_<name>` so analytics can auto-discover feature columns by prefix.
@@ -280,7 +289,7 @@ For each setup-detector firing, taken or not:
 - `reason_not_taken` (free text initially; codified to categories after several weeks).
 - If taken, foreign key to `trade_id`.
 
-This dataset is the only way to study selection bias. Without it the analytics under-estimates effects on features inside Bryce's existing mental rubric and over-estimates effects on features that happen to coincide with his existing filters. Every day without forward capture accrues biased data, so M3 (counterfactual infrastructure) runs in parallel with the historical analytics, not after.
+This dataset is the only way to study selection bias. Without it the analytics under-estimates effects on features inside Allie's existing mental rubric and over-estimates effects on features that happen to coincide with her existing filters. Every day without forward capture accrues biased data, so M3 (counterfactual infrastructure) runs in parallel with the historical analytics where feasible. Under the current "deep analysis" framing, real-time forward capture may slip to post-MVP; backward replay from historical bars is still required at M3.
 
 ## Statistical methodology (summary; full detail in RESEARCH_PLAN.md)
 
@@ -394,14 +403,29 @@ A trend stack is observable. A "predicted breakout success probability from an u
 - **Timezone discipline**: everything UTC internally. Convert to America/New_York only at display or when bucketing by RTH. Use `zoneinfo`, never `pytz`.
 - **No em-dashes** in generated reports or docs. Use commas, parens, or sentence breaks instead.
 
-## How to talk to the user
+## How to talk to Bryce (the developer / project owner)
 
-- **Direct answers first, context after.** Bryce processes information faster when the conclusion leads.
-- **ADHD-friendly formatting**: short sections, scannable bullets, bold the key terms. Avoid walls of prose. Avoid em-dashes.
+This section governs how the AI assistant communicates with Bryce in chat / PR review / planning.
+
+- **Direct answers first, context after.** Lead with the conclusion.
+- **Scannable formatting**: short sections, bullets, bold the key terms. Avoid walls of prose. Avoid em-dashes.
 - **Show, don't ask.** If a decision can be defaulted with a reasonable choice, default it and note the assumption. Only ask when there's a real fork that changes the build.
-- **Skepticism is welcome.** If a request would lead to overfitting, p-hacking, or premature optimization, push back with the reasoning.
-- **Cite sources for any market/platform claim.** NinjaTrader behavior, TradingView API limits, Pine Script syntax change. Don't guess from training data.
+- **Skepticism is welcome.** If a request would lead to overfitting, p-hacking, or premature optimization, push back with the reasoning. Treat Bryce as a technical peer (Senior IT PM and Platform Architect background).
+- **Cite sources for any market/platform claim.** NinjaTrader behavior, Tradezella export schema, TradingView API limits, Pine Script syntax all change. Don't guess from training data.
 - **Report sample size and number of tests** on every statistical claim. "Feature X has IC 0.12" is incomplete. "Feature X has IC 0.12, N=240, BH-FDR adjusted across 25 tests, walk-forward median across 6 windows" is the right shape.
+
+## How to design outputs for Allie (the trader / end consumer)
+
+This section governs HTML reports, dashboards, alert payloads, exported tag suggestions, README text Allie reads. Allie has ADHD and is the actual customer; reports she can't quickly parse are reports she won't use.
+
+- **Conclusion-first layout.** Every report starts with a one-line takeaway and a 3-bullet summary. Dense detail lives below the summary, not as the lead.
+- **Visual over numeric.** A color-coded bar / heatmap / histogram with one annotated insight beats a 20-row table of p-values. The table can exist below the chart, not above it.
+- **Color coding consistent project-wide**: green = winning / positive edge / passing gate; red = losing / negative edge / failing gate; gray = inconclusive / insufficient sample.
+- **Plain language for stats.** Never write "BH-FDR-adjusted Spearman IC of 0.13 (95% bootstrap CI 0.04-0.22)." Write "Feature X is meaningfully correlated with winners (medium-strong signal, sample size large enough to trust)." Put the technical detail in a collapsible "stats detail" footer or appendix.
+- **Per-trade language tied to Allie's vocabulary.** Use the tag names she already uses in Tradezella, not invented analytics jargon. If she calls it "fakeout entry," don't relabel it "Type-3 trigger" in her report.
+- **One page, then drill-down.** Default dashboard view is one screen, no scrolling. Click to expand for detail.
+- **Short, named insights.** "Your A+ trades on MNQ in the 9:30-10:00 ET window are your highest-edge bucket" beats a paragraph.
+- **Honest uncertainty.** When sample size is small, say so plainly in the headline, not in a footnote. "Only 18 trades in this bucket, treat as a hint not a finding."
 
 ## Build order
 
@@ -412,7 +436,7 @@ Mapped:
 1. **M0 dataset audit** → `notebooks/00_dataset_audit.ipynb`. Count trades by month/instrument/setup. Kill criterion: <100 taken trades or <6 months of consistent rules.
 2. **M1 + `src/ingest/ninjatrader.py` + `src/dq/`** → parse NT CSVs, run DQ suite. Kill: DQ pass rate < 95%.
 3. **M2** → `notebooks/02_expectancy_baseline.ipynb` answering Q1. Bootstrap CI on mean R. Kill: 95% CI on mean R negative.
-4. **M3 (parallel)** → Pine setup detector + Apps Script webhook + backward replay. Stand up the counterfactual capture. Validate detector agreement with Bryce >= 85% on 30 manual-labeled samples.
+4. **M3 (parallel where feasible; real-time may slip to post-MVP)** → Pine setup detector + backward replay. Stand up the counterfactual capture. Validate detector agreement with Allie >= 85% on 30 manual-labeled samples.
 5. **`src/features/` minimum viable set** → price location, temporal, outcome (forward returns and MFE/MAE). 8-10 features. Point-in-time tests for each.
 6. **`src/join.py`** → for each trade, slice bar window, call feature functions with `as_of=entry_time`. Output enriched parquet.
 7. **M4** → `notebooks/03_univariate_analysis.ipynb`. IC + expectancy lift + bootstrap CI + permutation p + BH-FDR across all features. Kill: zero features clear FDR-adjusted IC threshold of 0.10.
@@ -420,7 +444,7 @@ Mapped:
 9. **M6 + `notebooks/05_rubric_v1.ipynb`** → hand-built `rubric/versions/v1.yaml`. In-sample monotonicity check (mandatory).
 10. **M7 + `src/analytics/walkforward.py`** → rolling-origin walk-forward. **GO/NO-GO GATE.** Pass = engineering build resumes. Fail = collect more data or accept that the rubric does not deploy.
 11. **Conditional on M7=GO**: remaining feature categories (order flow, HTF context, market context, trader state), Pine alerts in production, refinement to v2.
-12. **M9 forward-test (3 months minimum)** → live ex-ante grade vs ex-post outcome tracking. Answers Q4 (does Bryce's intuition agree).
+12. **M9 forward-test (3 months minimum)** → live ex-ante grade vs ex-post outcome tracking. Answers Q4 (does Allie's intuition agree).
 13. **`src/analytics/importance.py`** → sklearn + SHAP for non-linear interaction discovery. Informs the rubric; does not replace it.
 
 ## Anti-goals
@@ -428,7 +452,7 @@ Mapped:
 Things this project explicitly does NOT do:
 
 - **No automated execution.** This is an analytics and grading system, not a trading bot. Pine alerts inform; the human pulls the trigger in NinjaTrader.
-- **No black-box ML as the grader.** Feature importance from ML informs the rubric. The rubric itself stays as transparent weighted-checklist YAML Bryce can read and reason about.
+- **No black-box ML as the grader.** Feature importance from ML informs the rubric. The rubric itself stays as transparent weighted-checklist YAML Allie can read and reason about.
 - **No predicting market direction beyond observable state.** Features condition on what is true at entry, never on a predicted future. See section "No predicting market direction".
 - **No overfitting to small samples.** Any rubric change requires the sample-size floors in section "Sample-size floors" and walk-forward validation per section "Walk-forward protocol".
 - **No subjective fields in the enriched dataset.** Everything is computed from price/volume/time/order-flow. "Trigger looked clean" gets translated to body-ratio thresholds. If you can't define it numerically, it doesn't go in the rubric.
@@ -444,13 +468,14 @@ Two pools. Engineering open questions affect build scoping. Research open questi
 
 ### Engineering open questions
 
-1. **Which 1-3 setups are in scope first?** Need the actual setup definitions before writing Pine Script and feature lists. See RESEARCH_PLAN.md open question 5 for the falsifiable-predicate format required.
-2. **Which futures contracts?** ES, NQ, CL, GC, MES/MNQ. Affects tick value, session times, which market context features matter, and whether per-instrument rubrics are required.
-3. **How much trade history exists?** Drives whether walk-forward is feasible immediately or whether the project pauses for forward capture (M0 kill criterion).
-4. **Existing Tradezella tag taxonomy?** If tags already exist, normalize to those names instead of inventing new ones.
-5. **Comfortable with pandas/notebooks, or prefer CLI scripts with HTML reports?** Affects how the analytics layer is exposed.
-6. **Stop placement methodology (highest priority).** Determines whether R-multiple or forward-horizon return is the primary outcome. See RESEARCH_PLAN.md open question 1.
-7. **Will Bryce log 1-5 pre-trade conviction going forward?** Required for Q4. If no, Q4 is dropped.
+1. **Which 1-3 setups are in scope first?** Need the actual setup definitions from Allie before writing Pine Script and feature lists. See RESEARCH_PLAN.md open question 5 for the falsifiable-predicate format required.
+2. **MNQ vs NQ pooling**: confirmed scope is MNQ + NQ. Treat as same-setup-different-sizing (pooled) or as separate populations? `PROJECT_KICKOFF.md` section 3.4.
+3. **Bar data source (architectural blocker).** Tradezella stores fills, not OHLCV. NT, broker API, TradingView export, or paid feed. `PROJECT_KICKOFF.md` section 4.3 must be resolved before Phase 1.
+4. **How much Tradezella trade history exists?** Drives whether walk-forward is feasible immediately or whether the project pauses for forward capture (M0 kill criterion).
+5. **Existing Tradezella tag taxonomy?** Allie already uses Tradezella; whatever tags / custom fields she has become the vocabulary for the rubric outputs. Do not invent new names.
+6. **Output format for Allie**: HTML report file emailed weekly, hosted dashboard, Tradezella custom fields populated automatically, or all three? Bryce decision informed by Allie preference.
+7. **Stop placement methodology (highest priority).** Determines whether R-multiple or forward-horizon return is the primary outcome. See RESEARCH_PLAN.md open question 1.
+8. **Will Allie log 1-5 pre-trade conviction going forward** (via Tradezella custom field or trade note)? Required for Q4. If no, Q4 is dropped.
 
 ## References
 
