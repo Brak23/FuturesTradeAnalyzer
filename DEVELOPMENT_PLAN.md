@@ -272,6 +272,8 @@ The minimum MVP set (write as you go, all in place by end of Phase 6):
 | F8 | **Idempotency**: re-running any stage on the same input parquet produces a bit-identical output parquet (modulo manifest timestamps). | Detects accidental non-determinism (unset seeds, dict iteration order). | Slow-marked test runs each stage twice, diffs output. |
 | F9 | **Coverage threshold**: `pytest-cov` enforces >= 80% line coverage on `src/`. | Floor on test discipline. | CI fail. |
 | F10 | **Point-in-time guard tests exist per feature**: introspects `src/features/` and asserts every public feature function has a corresponding `test_<name>_rejects_future_data` test. | Catches feature additions that forget the guard test. | Test enumerates features, looks for test names, fails on missing. |
+| F11 | **Truncation invariance for aggregating features (QH5/QH6)**: every aggregating feature (VWAP, cumulative delta, ATR percentile, anything with internal accumulation) satisfies `f(df_full, as_of=t) == f(df_truncated_at_t, as_of=t)`. | Catches subtle leaks where the AGGREGATION uses future data even when the called row's timestamp is in the past. F1 alone does NOT catch this. | Parametrized test feeds each aggregating feature both versions of the dataframe, asserts equality. |
+| F12 | **Bucket-size floor (QH16)**: any expectancy-by-quintile report rejects buckets with N < 25 and falls back to tertiles with a "small sample" flag. | Prevents 10-observation buckets being reported as estimates. | Test feeds a 50-row fixture, asserts the report degrades to tertiles + flag. |
 
 **Failures of any fitness function are architectural regressions, not normal bugs.** They take precedence over feature work. Adding a new fitness function is itself a small ADR (2.7).
 
@@ -317,10 +319,60 @@ Neutral: anything else worth noting.
 | ADR-0006 | Forward-horizon returns as primary outcome metric | Conditional on stop-methodology answer; flag superseding ADR if R-multiple becomes primary |
 | ADR-0007 | Notebook-first then promote (not src-first) | Sets the working model; explains why Phase 1-4 deliverables look like notebooks |
 | ADR-0008 | Local-laptop monolith over cloud / microservices | Scope decision; rules out an entire class of complexity for the foreseeable horizon |
+| ADR-0009 | Order flow classification method (Lee-Ready default, tick-rule fallback) | Quant-methodology decision (QH8); affects every downstream conclusion that uses cumulative delta |
+| ADR-0010 | Net-of-costs as primary metric, gross as reporting only | Quant-methodology decision (QH1); affects every threshold and gate in the project |
 
 **ADRs are versioned in git, never deleted.** Superseded ones are marked superseded with a link to the replacement. This is the project's architectural history.
 
 **ADR cadence**: write one when a decision is being made, not after. Re-opening a decision (e.g., switching bar source vendor) supersedes the prior ADR rather than editing it.
+
+### 2.8 Quantitative methodology hazards (logical gaps and resolutions)
+
+Sections 1.5-1.8 and 2.6-2.7 protect against engineering errors. The list below catalogs **quantitative-methodology errors that would invalidate results even with perfect engineering**. Each has a specific resolution baked into the relevant phase. The hazards below are not paranoia: every one of them is a documented failure mode in discretionary-trading analysis.
+
+#### Outcome and label hygiene
+
+| # | Hazard | The logical problem | Resolution and phase |
+|---|---|---|---|
+| QH1 | **Transaction cost realism** | Plan treats R-multiple and forward returns as gross. Real economics include commission (~$0.50/MNQ contract, ~$2.50/NQ at typical brokers), exchange and regulatory fees, and slippage. A "0.3R lift" gross may evaporate or invert net of costs. The asymmetry MNQ vs NQ also matters: MNQ has 1/10 the tick value but commission scales much less than 1/10. | Compute BOTH gross and net at outcome stage (`src/features/outcome.py`). All rubric thresholds and acceptance gates use NET. Per-instrument cost lookup table in `src/config.py`. Slippage modeled as: taken trades use realized fill price (no model needed); counterfactual setups use entry-bar close +/- half-spread estimate. Phase 4. |
+| QH2 | **Forward-return reference price ambiguity** | "Forward 30min return" can use entry FILL price, entry BAR close, entry BAR open, or midpoint. Each gives different numbers and different IC. Currently unspecified. | Canonical: entry FILL price for taken trades; entry-bar close for counterfactual setups (no fill exists). Documented in `src/features/outcome.py` docstring. Test asserts both code paths. Phase 4. |
+| QH3 | **Forward-return window overlap** | Trades taken 5 minutes apart have forward-30min windows that overlap by 25 minutes. The "independent samples" assumption underlying permutation tests and naive bootstrap is violated; significance inflates. | Tag trades whose forward windows overlap. Report ICs both ways (overlapping included / excluded). Stationary bootstrap block length must cover the longest overlap. Phase 5. |
+| QH4 | **MFE/MAE granularity** | Bar-by-bar MFE/MAE understates true excursion: a 1-minute bar shows the high and low but not the path within. Two trades with identical 1-min bar MFE may have very different tick-level MFE. | Compute MFE/MAE from tick data when `BarSource.has_tick_data()` returns true; otherwise use 1-second or 5-second bars for the MFE/MAE window even if entry features use 1-minute. Document the granularity in the outcome module. Phase 4. |
+
+#### Feature computation leaks (subtler than the §2.6 F1 point-in-time guard)
+
+The F1 fitness function catches the obvious case (passing a future-timestamp row to a feature). It does NOT catch the subtle cases below, where the feature is structurally leaky even when called correctly.
+
+| # | Hazard | The logical problem | Resolution and phase |
+|---|---|---|---|
+| QH5 | **Session-VWAP using future intraday data** | "VWAP of today's session" at 10am can naively use `df.vwap.iloc[-1]` and return the 4pm value. Even without F1 violation (timestamp is "today"), the AGGREGATION is over future data. | VWAP feature accepts `as_of` and computes cumulative VWAP over rows strictly before `as_of`. Test asserts `vwap(df_full, as_of=t)` equals `vwap(df_truncated_at_t, as_of=t)`. New fitness function F11 generalizes this: any aggregating feature must be invariant under truncation of post-`as_of` rows. Phase 4. |
+| QH6 | **Trailing-percentile using today's incomplete data** | "ATR percentile vs trailing 60 days" — if "trailing" includes today's in-progress ATR (depends on today's full range, including post-entry bars), it's a leak. | Percentile computed against the 60 prior CLOSED sessions only. Today is never in the percentile window. Test asserts. Phase 4. |
+| QH7 | **Indicator warmup** | EMA(200) needs 200 bars to stabilize. The first 200 bars of any feature series produce values that depend on the initialization choice (zero-fill vs forward-fill vs NA). Currently unspecified. | Drop the first `MAX_INDICATOR_LOOKBACK` bars (default 200, in `src/config.py`) per session OR mark them with a `warmup_incomplete` flag. Features in warmup period are excluded from IC computation. Phase 4. |
+| QH8 | **Order flow methodology under-specified** | "Cumulative delta at entry" — computed how? Tick rule (uptick = buy)? Bid/ask classification (Lee-Ready 1991)? Trade-at-bid vs trade-at-ask? Each gives different results, sometimes substantially. CLAUDE.md hand-waves this. | Write **ADR-0009: Order flow classification method**. Default: Lee-Ready bid/ask classification if quote data available; tick-rule fallback when only trade data exists. Test against a synthetic series with known ground truth. Phase 0 for the ADR; Phase 4 if order flow features ship in MVP. |
+
+#### Sample composition and confounds
+
+| # | Hazard | The logical problem | Resolution and phase |
+|---|---|---|---|
+| QH9 | **MNQ + NQ pooling without test** | Plan asks Allie whether she treats them the same. The right answer is to TEST it (KS test on R distributions, stability of feature ICs across the two instruments). Pooling without testing masks instrument-specific regimes. | Phase 4 adds a pooling test: KS on R distributions and IC-rank-correlation across instruments. If KS rejects same-distribution OR Spearman rank-correlation of feature ICs across instruments < 0.7, run separate rubrics. Result documented in M4 memo. |
+| QH10 | **Time-of-day as confound, not just feature** | Allie may concentrate trades in certain hours. Any feature whose value correlates with time-of-day will get spurious IC from the time-of-day return distribution. Including "minute of session" as a feature does NOT control for this; it just gives time-of-day its own slot. | Phase 5 univariate analysis runs each feature in TWO modes: raw IC and time-of-day-stratified IC (compute IC within each session bucket, then aggregate). If raw and stratified IC diverge sharply, the feature is at least partly a time-of-day proxy. Flagged in report. |
+| QH11 | **Trade duration as confound** | Allie's setups span scalp (30 sec) to swing (multi-hour). A forward 30min return is overwhelming for a scalp (most of the move is the entry) and noise-dominated for a swing (the holding period is longer than the label). Pooling forces a one-size horizon that fits neither. | Phase 4 deliverable: compute forward returns at multiple horizons (5/15/30/60 minutes). Phase 5 also runs IC per trade-duration tertile. Phase 6 rubric promotion criteria checked per duration segment. If feature edges differ wildly by duration, separate rubrics or duration as a rubric input. |
+| QH12 | **News / scheduled event contamination** | Forward 30min return through an FOMC release is dominated by the release, not the setup. The `feat_market_event_distance` feature exists in CLAUDE.md but the analysis plan doesn't say what to DO about contaminated forward returns. | Phase 4 outcome computation also produces a `forward_return_excl_event` variant that masks (sets to NA) when the forward window contains a major scheduled event. Phase 5 runs IC against both. If they diverge, events are dominating the signal. |
+| QH13 | **Trade unit of analysis fuzziness** | Tradezella aggregates partials in configurable ways. The same 5-lot trade scaled out in 3 chunks can register as 1 trade or 3 depending on settings. This affects EVERY downstream metric (trade count, win rate, R, IC). | Phase 1 ingest documents the Tradezella aggregation policy in use (via Allie's account settings). Adds `trade_unit_policy` to every parquet manifest. Re-aggregation script in `scripts/regroup_partials.py` if policy needs to change later. |
+| QH14 | **Survivorship / logging bias in Tradezella history** | The dataset is "trades Allie logged in Tradezella." Trades she forgot to log, days she skipped, trades cancelled before fill — systematically missing. | Phase 1 cross-checks Tradezella trade count vs broker statement trade count for one sample month. Documents the difference. If logging gap >5%, flag systemic bias risk in M0 memo and consider whether the analysis stratifies by data-quality period. |
+
+#### Statistical inference
+
+| # | Hazard | The logical problem | Resolution and phase |
+|---|---|---|---|
+| QH15 | **Bootstrap block length not validated against actual autocorrelation** | Stationary bootstrap with Politis-White auto-selection is specified, but the plan doesn't verify the chosen block is appropriate for Allie's R series. Trade outcomes are often autocorrelated within-day (tilt, regime persistence). | Phase 4 adds ACF/PACF plot of the R series to the M2 memo, plus the auto-selected vs manually-validated block length comparison. If autocorrelation persists past auto-selected block, override. |
+| QH16 | **Minimum bucket size for quintile expectancy** | "E[R | top quintile]" with N=50 total trades gives 10 obs/bucket. That's a sample, not an estimate; bootstrap CI will be too wide to claim anything. Currently no floor. | Phase 5 enforces: refuse to report quintile expectancy lift when any bucket size < 25. Fall back to tertiles or terciles below that, with explicit "small sample" flag in the report. New fitness function F12 enforces the floor. |
+| QH17 | **Negative control feature not operationalized** | RESEARCH_PLAN.md open question 10 says Allie names a feature she'd bet has zero edge as a methodology sanity check. DEVELOPMENT_PLAN.md doesn't include it anywhere. | Phase 4 adds the negative control feature (named by Allie during kickoff hypothesis pre-registration) to the feature set under the name `feat_negative_control_<slug>`. Phase 5 reports whether it spuriously clears FDR. **If it does, the methodology has a leak and analysis pauses for diagnosis.** |
+| QH18 | **Stop-type segmentation not in build plan** | RESEARCH_PLAN.md Q8 is methodologically critical (R-multiple validity depends on stop type) but DEVELOPMENT_PLAN.md doesn't include the analysis. | Phase 5 adds KS test on R distributions partitioned by `stop_type`. If distributions differ significantly (p < 0.05), the primary outcome metric switches to forward returns for the rubric build, even if R was the default. |
+| QH19 | **Walk-forward window count below statistical relevance** | 12 months minus 6mo train minus 1mo embargo = ~5 OOS windows. The promotion criterion "monotonic in 60% of windows" means 3-of-5; that has binomial p ~ 0.5 under chance, i.e., barely distinguishable from a coin flip. | Phase 6 reports the binomial p-value of the "60% of windows monotonic" requirement given the actual window count. If p > 0.10, the criterion is underpowered; the report says so in the headline and additionally requires combinatorial purged CV (Lopez de Prado 2018) as a supplement. |
+| QH20 | **Probability of Backtest Overfitting (PBO) not computed** | Deflated Sharpe is specified. PBO (Bailey, Borwein, Lopez de Prado 2017) is more directly relevant when comparing rubric versions: PBO answers "what's the probability my best in-sample rubric is actually the best out-of-sample?" | Phase 6 adds PBO computation in `src/analytics/pbo.py` alongside deflated Sharpe for v_n vs v_n+1 comparisons. PBO > 0.5 means the chosen rubric is more likely overfit than skilled; promotion fails. |
+
+**How to use this catalog**: every analytics report and every milestone memo cites which hazards it addresses, and which it explicitly does not. A claim that ignores a relevant hazard is not "preliminary," it is wrong.
 
 ---
 
@@ -357,9 +409,11 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 - Allie exports trades CSV from Tradezella (last 12 months, all instruments, all fields). Place under `data/raw/tradezella/`.
 - If bar data source per `PROJECT_KICKOFF.md` section 4.3 is NT, Allie also exports bars. Otherwise stub the bar fetch interface and defer until that source is wired in Phase 2.
 - `notebooks/00_dataset_audit.ipynb`: count trades by month, instrument (MNQ vs NQ), setup, account context. Plot timeline. Identify rule-change dates.
+- **QH13 trade-unit policy**: document Tradezella's partial-fill aggregation policy currently in use; record it in the memo.
+- **QH14 logging-gap audit**: for one sample month, cross-check Tradezella trade count vs broker statement count. Report % gap.
 - Memo: `data/reports/M0_dataset_audit.md`.
 
-**Kill criterion**: <100 taken trades or <6 months of consistent rules. If hit, project pauses; only counterfactual / forward-capture (Phase 3) proceeds.
+**Kill criterion**: <100 taken trades or <6 months of consistent rules. If hit, project pauses; only counterfactual / forward-capture (Phase 3) proceeds. Additional soft warning: logging gap >5% triggers a stratification plan.
 
 ### Phase 2 — M1 Ingest + DQ (Week 2)
 
@@ -404,26 +458,36 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 **Goal**: Answer Q1. Build the minimum feature set required for Phase 5.
 
 **Tasks**:
-- `src/analytics/expectancy.py`: stationary bootstrap on mean R; bootstrap CI on mean forward-30min return. Use forward returns as primary if `stop_type = "mental"` dominates the dataset (decided at M0).
-- `notebooks/02_expectancy_baseline.ipynb`: produce M2 memo.
-- **MVP feature set** (~8 features chosen for sample-size discipline):
-  - `feat_price_vwap_dist_atr` (distance from VWAP in ATR units)
+- `src/analytics/expectancy.py`: stationary bootstrap on mean R AND mean forward-30min return, both **gross and net of costs (QH1)**. Use forward returns as primary if `stop_type = "mental"` dominates the dataset (decided at M0).
+- **QH1 cost lookup**: per-instrument commission, exchange, and regulatory fees in `src/config.py` (MNQ vs NQ); slippage model for counterfactual setups documented in `src/features/outcome.py`.
+- **QH15 autocorrelation diagnosis**: ACF/PACF plot of R series; report Politis-White auto-block alongside a manually-validated block. Both in M2 memo.
+- `notebooks/02_expectancy_baseline.ipynb`: produce M2 memo. Headline numbers are NET, gross shown below.
+- **MVP feature set** (~8 features chosen for sample-size discipline, plus negative control):
+  - `feat_price_vwap_dist_atr` (distance from VWAP in ATR units; QH5 truncation-invariant)
   - `feat_price_prior_day_high_dist_atr`
   - `feat_price_prior_day_low_dist_atr`
   - `feat_temporal_minute_of_session`
   - `feat_temporal_open_auction_proximity`
-  - `feat_volatility_atr_pct_60d`
+  - `feat_volatility_atr_pct_60d` (QH6 prior-closed-sessions only)
   - `feat_volume_rvol_20d`
-  - `feat_orderflow_cum_delta_session` (if tick data available; if not, deferred)
-- `src/features/<file>.py` for each domain.
+  - `feat_orderflow_cum_delta_session` (if tick data available, classified per ADR-0009 / QH8; if not, deferred)
+  - `feat_negative_control_<slug>` (**QH17**, named by Allie at kickoff; must NOT clear FDR at Phase 5 or methodology is broken)
+- `src/features/<file>.py` for each domain. **QH7 warmup**: drop first `MAX_INDICATOR_LOOKBACK` bars per session or flag `warmup_incomplete=True`; warmup rows excluded from analytics.
 - `src/join.py`: for each trade, slice bar window, call each feature function with `as_of = entry_time`.
-- `src/features/outcome.py`: compute MFE/MAE in R + forward returns at t+5/15/30/60.
-- Unit tests + point-in-time guard tests for every feature.
+- `src/features/outcome.py`: compute
+  - MFE/MAE in R (**QH4**: tick-data when `BarSource.has_tick_data()`, else 5-second bars for the excursion window even if entry features are 1-minute).
+  - Forward returns at t+5/15/30/60 minutes (**QH11** multiple horizons).
+  - Both raw and `forward_return_excl_event` masked variants (**QH12**: NA when forward window contains FOMC/CPI/NFP/EIA).
+  - Reference price: entry FILL for taken trades, entry-bar close for counterfactual (**QH2**; documented in module docstring + tested both paths).
+- **QH9 pooling test**: KS test on R distributions MNQ vs NQ; Spearman rank-correlation of feature ICs across the two. Verdict (pool / separate) written into M4 memo.
+- Unit tests + point-in-time guard tests for every feature, plus **truncation-invariance tests for every aggregating feature (new fitness function F11)**.
 - `just features` produces `data/enriched/trades_features.parquet`.
 
-**Deliverable**: enriched parquet + M2 memo + feature implementation with passing tests.
+**Deliverable**: enriched parquet + M2 memo (with gross/net headline + ACF diagnosis) + feature implementation with passing tests + QH9 pooling verdict.
 
-**Kill criterion** (M2): 95% bootstrap CI on mean R negative. Project pauses; strategy review before grading work.
+**Kill criterion** (M2): 95% bootstrap CI on **net** mean R negative. Project pauses; strategy review before grading work.
+
+**Additional methodology kill**: if `feat_negative_control_<slug>` clears the FDR-adjusted IC threshold at Phase 5 (QH17), the pipeline has a leak; stop and diagnose before trusting any other result.
 
 ### Phase 5 — M4 Univariate analytics + M5 Bivariate (Weeks 4-6)
 
@@ -431,33 +495,43 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 
 **Tasks**:
 - `src/analytics/univariate.py`: per feature, compute Spearman IC vs forward-30min return; bootstrap CI on IC; permutation p-value (10k shuffles, fixed seed); BH-FDR across all features.
+- **QH3 overlap handling**: tag trades whose forward windows overlap with adjacent trades; report IC two ways (with and without overlapping trades). Stationary bootstrap block length covers the longest overlap.
+- **QH10 time-of-day stratification**: every feature reported in TWO modes — raw IC and time-of-day-stratified IC. Sharp divergence flagged as "feature is partly a time-of-day proxy."
+- **QH11 duration-segmented IC**: every feature reported per trade-duration tertile (short / medium / long). Big differences trigger Phase 6 discussion of duration-conditional rubrics.
+- **QH16 bucket-size floor**: refuse to report quintile expectancy lift when any bucket size < 25; fall back to tertiles/terciles with explicit "small sample" flag. Enforced by new fitness function F12.
+- **QH18 stop-type segmentation**: KS test on R distributions partitioned by `stop_type`. If p < 0.05, switch primary outcome to forward returns even if R was the default. Phase 6 inherits the switched outcome.
+- **QH17 negative-control reporting**: the M4 memo prominently states whether `feat_negative_control_<slug>` cleared FDR. If yes, **methodology stop**: full diagnosis before any other conclusion.
 - `src/analytics/distributions.py`: MFE/MAE histograms by feature quintile.
 - `notebooks/03_univariate_analysis.ipynb`: ranked feature table + plots + memo.
 - `src/analytics/interactions.py`: pairwise ANOVA on top 6 features.
 - `notebooks/04_bivariate_interactions.ipynb`: interaction memo.
 
-**Deliverable**: M4 memo with FDR-adjusted feature ranking; M5 interaction memo.
+**Deliverable**: M4 memo with FDR-adjusted feature ranking (raw + time-stratified + duration-segmented), negative-control verdict, stop-type segmentation verdict; M5 interaction memo.
 
-**Kill criterion** (M4): zero features pass FDR-adjusted IC threshold of 0.10. Revisit feature set or sample size; do not lower the bar.
+**Kill criterion** (M4): zero features pass FDR-adjusted IC threshold of 0.10 in BOTH raw and time-stratified modes. Revisit feature set or sample size; do not lower the bar.
+
+**Methodology kill (overrides M4 kill criterion)**: negative-control feature clears FDR. Pipeline has a leak; stop and diagnose before trusting any other result.
 
 ### Phase 6 — M6 Rubric v1 + M7 Walk-forward (Weeks 7-9). **MVP COMPLETE AT END OF M7.**
 
 **Goal**: Build rubric v1 from analytics output. Validate via rolling-origin walk-forward. Pass or fail the deployment gate.
 
 **Tasks**:
-- `src/rubric/builder.py`: applies the weight derivation table (CLAUDE.md). Selects <= 8 features. Sets grade thresholds (A+ top 20%, A next 30%, B bottom 50%).
+- `src/rubric/builder.py`: applies the weight derivation table (CLAUDE.md). Selects <= 8 features. Sets grade thresholds (A+ top 20%, A next 30%, B bottom 50%). Inputs are the **net** outcome metric chosen at Phase 4 (forward returns if QH18 stop-type switch fired or stop_type=mental dominates; otherwise R-multiple).
 - `rubric/versions/v1.yaml`: hand-reviewed output of the builder.
 - `src/rubric/apply.py`: pure function `(trade_features, rubric) -> grade`.
-- `src/rubric/versioning.py`: enforces promotion criteria; refuses to overwrite a promoted version.
-- `notebooks/05_rubric_v1.ipynb`: in-sample monotonicity check.
+- `src/rubric/versioning.py`: enforces promotion criteria; refuses to overwrite a promoted version. Fitness function F7 (rubric size cap <= 8) blocks load on violation.
+- `notebooks/05_rubric_v1.ipynb`: in-sample monotonicity check. **QH11**: monotonicity also checked per trade-duration segment, not just pooled.
 - `src/analytics/walkforward.py`: rolling-origin 6mo train / 1mo test / 1mo step, 1-day embargo. Refits rubric per window.
-- `src/analytics/deflated_sharpe.py`: Bailey & Lopez de Prado 2014 for the v_n vs v_{n+1} comparison.
-- `notebooks/06_walkforward_validation.ipynb`: bucket-expectancy chart per window, stability metrics, memo.
-- `src/reports/html.py`: HTML report template; emits M7 report with all reproducibility headers.
+- **QH19 walk-forward power check**: report the binomial p-value of the "60% of windows monotonic" promotion criterion given the actual window count. If p > 0.10, the criterion is underpowered; M7 report headline says so AND combinatorial purged CV runs as a supplemental validator (`src/analytics/cpcv.py`).
+- `src/analytics/deflated_sharpe.py`: Bailey & Lopez de Prado 2014 for v_n vs v_{n+1} comparison.
+- `src/analytics/pbo.py`: **QH20** Probability of Backtest Overfitting (Bailey, Borwein, Lopez de Prado 2017). PBO > 0.5 means the chosen rubric is more likely overfit than skilled; promotion fails.
+- `notebooks/06_walkforward_validation.ipynb`: bucket-expectancy chart per window, stability metrics, memo. Headline declares whether the dataset is statistically powered for the promotion criteria, BEFORE reporting the verdict.
+- `src/reports/html.py`: HTML report template; emits M7 report with all reproducibility headers AND the QH19 power statement up top.
 
 **Deliverable**: rubric v1 YAML + walk-forward report + M7 go/no-go memo.
 
-**Decision gate**: section 5.7 of RESEARCH_PLAN.md (all 7 promotion criteria).
+**Decision gate**: section 5.7 of RESEARCH_PLAN.md (all 7 promotion criteria) **PLUS** the QH20 PBO check (PBO < 0.5) and the QH19 power check (criterion is statistically powered or supplemental CPCV concurs).
 
 **GO**: Phase 7 begins; engineering continues.
 **NO-GO**: rubric v1 is shelved. Project enters waiting state for more data, or scope is reduced to forward capture only.
@@ -503,17 +577,36 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 - `src/dq/` (all 10 checks)
 - `src/features/price.py`, `temporal.py`, `volatility.py`, `volume.py`, `orderflow.py` (cumulative delta only, if tick data permits), `outcome.py`
 - `src/join.py`
-- `src/analytics/expectancy.py`, `univariate.py`, `distributions.py`, `interactions.py`, `walkforward.py`, `deflated_sharpe.py`
+- `src/analytics/expectancy.py`, `univariate.py`, `distributions.py`, `interactions.py`, `walkforward.py`, `deflated_sharpe.py`, `pbo.py`, `cpcv.py`
 - `src/rubric/builder.py`, `apply.py`, `versioning.py`
 - `src/reports/html.py` (jinja2 templates covering Q1, univariate, walk-forward outputs; ADHD-friendly layout per CLAUDE.md)
 - `src/migrations/` (empty at MVP; structure in place for first schema bump)
 - `src/config.py`
 
 **Architectural artifacts** (in addition to code):
-- ADRs 0001-0008 written.
-- Fitness functions F1-F10 implemented and CI-enforced.
+- ADRs 0001-0010 written.
+- Fitness functions F1-F12 implemented and CI-enforced.
 - `docs/adr/`, `docs/secrets.md`, `docs/failure_modes.md` populated.
 - Schema manifests on every enriched parquet.
+
+**Quant-methodology artifacts** (per §2.8):
+- Net-of-costs computation (QH1) + per-instrument cost table.
+- Forward-return reference price documented and tested (QH2).
+- Forward-window overlap handling (QH3) and ACF-validated bootstrap block (QH15).
+- Tick-data MFE/MAE when available (QH4).
+- Truncation-invariant aggregating features (QH5/QH6/F11).
+- Order flow classification per ADR-0009 (QH8).
+- MNQ/NQ pooling test verdict (QH9).
+- Time-of-day stratified IC reporting (QH10).
+- Multi-horizon forward returns + duration-segmented IC (QH11).
+- Event-masked forward-return variant (QH12).
+- Trade-unit policy documented in manifest (QH13).
+- Logging-gap audit at M0 (QH14).
+- Bucket-size floor with tertile fallback (QH16/F12).
+- Negative-control feature in feature set (QH17).
+- Stop-type segmentation analysis (QH18).
+- Walk-forward power check + CPCV supplement (QH19).
+- PBO computed for rubric promotion (QH20).
 
 **Pine Script**:
 - One setup detector firing alerts with feature payload (depends on which setup is in scope).
@@ -626,7 +719,13 @@ This complements RESEARCH_PLAN.md section 6 (statistical risks). Engineering-spe
 | ER11 | Concrete source class leaks past the protocol boundary (e.g., feature code starts importing `TradezellaCSVSource` directly), making future vendor swap require deep rewrite | Medium | High | F4 fitness function blocks merge; ADR-0005 documents the rule |
 | ER12 | Parquet schema drift between code and existing data (loader silently coerces or feature columns disappear) | Medium | High | F5 fitness function (manifest schema_hash match) blocks load; migration script required for any schema change |
 | ER13 | Fitness functions added at end of project rather than as you go (so they enforce nothing during the build) | Medium | Medium | Phase 0 deliverable requires F3/F4/F9 in place before any feature code is written |
-| ER14 | ADRs become checkbox theater rather than real decisions (filled in retroactively) | Medium | Low | Write ADR-0001-0008 in Phase 0 BEFORE the decisions are baked into code; any new ADR is written at decision time, not after |
+| ER14 | ADRs become checkbox theater rather than real decisions (filled in retroactively) | Medium | Low | Write ADR-0001-0010 in Phase 0 BEFORE the decisions are baked into code; any new ADR is written at decision time, not after |
+| ER15 | **Gross vs net confusion** (QH1): rubric thresholds set in gross, applied in net (or vice versa); apparent edge evaporates in production | Medium | High | All gates use NET; M2 memo headline says "NET" explicitly; CI check on report templates for the word "gross" without "net" alongside |
+| ER16 | **Hidden look-ahead in aggregating features** (QH5/QH6): F1 passes but VWAP/percentile uses post-`as_of` data via internal accumulation | High at first impl, Low after F11 | High | F11 fitness function (truncation invariance) catches at merge time |
+| ER17 | **Negative-control feature clears FDR** (QH17): methodology has a leak the codified checks didn't catch | Medium | High | Negative-control feature is mandatory in MVP; clearing it triggers methodology stop, not a "well, maybe it's real" path |
+| ER18 | **Walk-forward criteria pass at noise level** (QH19): 3-of-5 windows monotonic looks like a pass but is barely distinguishable from a coin flip | High at current data size | High | QH19 binomial power check in M7 report; CPCV supplement runs whenever power is borderline |
+| ER19 | **PBO not computed → rubric promoted despite high overfit probability** (QH20) | Medium | High | PBO is a hard gate in §3 Phase 6 decision criteria, not a "report only" metric |
+| ER20 | **Forward-window overlap inflates significance** (QH3): closely-spaced trades treated as independent samples; permutation tests over-reject | Medium | High | Overlap tagging in Phase 5; report dual ICs; bootstrap block length covers max overlap |
 
 ---
 
