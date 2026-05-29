@@ -4,7 +4,7 @@
 **Target domain**: `premarket.home`
 **Host**: homehub (`~/docker/premarket/`)
 **Stack anchor**: Python 3.11+, FastAPI, HTMX + Jinja2, DuckDB, APScheduler (DST-aware), UTC-internal / ET-at-display discipline throughout.
-**Companion docs**: `premarket_brief_design.md` (product + content), `premarket_brief_build_plan.md` (step-by-step + agent assignments).
+**Companion docs**: `premarket_brief_design.md` (product + content), `premarket_brief_ux_design.md` (visual/UX spec, design tokens, components), `premarket_brief_build_plan.md` (step-by-step + agent assignments), `premarket_brief_vendor_research.md` (bar-data vendor decision).
 
 ---
 

@@ -96,14 +96,14 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ## Phase 4 — Dashboard + email (Days 14-17)
 
-**Goal**: The brief is visible at `premarket.home` and delivered by 07:00 email, in the ADHD-friendly layout.
+**Goal**: The brief is visible at `premarket.home` and delivered by 07:00 email, in the ADHD-friendly layout. **Implement to the full visual spec in `premarket_brief_ux_design.md`** (design tokens, component anatomy, the SVG price ladder, states, email variant).
 
 | Step | What | Agent |
 |---|---|---|
-| 4.1 | ADHD-friendly layout: Risk Mode badge, headline, catalyst banner, **price-ladder visual**, vol/sizing line; green/red/gray convention; one-screen-then-drill-down | `voltagent-core-dev:ui-designer` |
-| 4.2 | `templates/base.html`, `dashboard.html`, `brief_fragment.html`; HTMX poll-to-refresh during 06:00-10:00 ET only | `voltagent-core-dev:frontend-developer` |
+| 4.1 | Design system already specified in `premarket_brief_ux_design.md`; translate its tokens into `base.html` CSS custom properties (dark theme, Inter + JetBrains Mono tabular figures, spacing/radius/motion) and confirm component specs | `voltagent-core-dev:ui-designer` |
+| 4.2 | `templates/base.html`, `dashboard.html`, `brief_fragment.html` per the UX spec; the **SVG price-ladder**; HTMX poll-to-refresh gated off after 07:30 ET via Alpine; expand/collapse drill-down | `voltagent-core-dev:frontend-developer` |
 | 4.3 | `api/routes_dashboard.py` + `routes_api.py` (`/`, `/api/brief/latest`, `/api/brief/{date}`, `/health`) | `voltagent-lang:fastapi-developer` |
-| 4.4 | `email_sender/send.py` (SMTP+TLS) + `templates/email.html` with inlined CSS (premailer) | `voltagent-core-dev:backend-developer` |
+| 4.4 | `templates/email.html` (table-based, inlined CSS via `DESIGN_TOKENS`, ladder-as-table, Outlook fallbacks per UX spec) + `email_sender/send.py` SMTP+TLS, premailer inlining | `voltagent-core-dev:frontend-developer` + `voltagent-core-dev:backend-developer` |
 | 4.5 | Accessibility / scannability pass (color-contrast, mobile, 30-second readability) | `voltagent-qa-sec:accessibility-tester` |
 
 **Gate**: `premarket.home` renders the brief; a test email arrives and renders correctly in Gmail and Apple Mail; mobile layout verified (use the `verify` skill or `voltagent-qa-sec:ui-ux-tester`).
