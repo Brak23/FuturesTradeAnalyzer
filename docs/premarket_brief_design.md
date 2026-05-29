@@ -84,6 +84,61 @@ Each contract (MNQ, NQ) gets its tick-value annotation so the points-based level
 
 ---
 
+## 3A. Curated content spec (quant-analyst + risk-manager review)
+
+A quant-analyst and risk-manager reviewed the content above. Both converged on one principle: **the cut list matters more than the keep list. The brief should feel boring on a boring day, and that restraint is the product.** A wall of numbers at 07:00 for a one-year ADHD trader anchors her, induces overtrading, or freezes her. This section TIGHTENS section 3; where they conflict, this section wins.
+
+### The brief, top to bottom (5 blocks, one phone screen)
+
+1. **Risk Mode badge (new, goes first).** One color-coded line that does the synthesis for her, because a one-year trader will not turn six data points into a sizing decision at 07:00:
+   - GREEN: normal day, trade your plan, normal size.
+   - YELLOW: trade smaller / be selective (elevated implied move, oversized overnight range, OPEX, mega-cap earnings reaction).
+   - RED: stand aside or trade tiny until the catalyst clears (high-impact timed event in or before her session).
+   Everything below the badge is just the evidence behind it.
+
+2. **Headline line** with the volatility qualifier baked in. Example: "NQ +78 pts (+0.4%), gap up, just under yesterday's high, on a quiet night (gap = 0.3x ATR)." Color the line green/red by direction; render GRAY (inconclusive) when the gap is under ~0.2 ATR so a non-event does not read like an event.
+
+3. **Catalyst banner.** High and medium impact only, capped at 3, expressed as clock-time no-trade windows she can set a timer for: "Avoid 08:28-08:35 (CPI)." When nothing is scheduled, SAY SO ("No major events, normal session"); that is itself decision-useful. Hard implication stated plainly: do not hold through an 08:30 print, stops do not protect you through the number. Flag FOMC 14:00 / presser 14:30 as a hard no-trade window if her session runs that late.
+
+4. **Price ladder (visual, not a table).** Current price marked in its true position between levels; nearest level above and below bolded; distance shown in points AND ATR-fractions so proximity is encoded by position, not mental math.
+
+   ```
+        --- ONH      20,460  (+42)
+   NOW  20,418  -----------------------
+        --- PDH      20,405  (-13)   [nearest below]
+        --- ON VWAP  20,360
+        --- PDL      20,290
+        --- ONL      20,255
+   ```
+
+5. **Volatility + sizing line.** Daily ATR, gap-as-fraction-of-ATR, and the core risk principle in plain terms: **dollar risk per trade is the constant, contract count is the variable.** "High-vol day: wider stop, fewer contracts to hold your dollar risk fixed." Plus a daily-stop reminder framed as "you are done after about N full stop-outs."
+
+### The cut list (both reviewers agreed)
+
+- **Prior-day close** as its own displayed level: redundant with settlement, false precision. Keep settlement (it is the gap reference); do not display close.
+- **Weekly / monthly high-low unconditionally:** show ONLY when current price is within ~1 ATR; suppress otherwise. Most days they will not appear, which is correct.
+- **Weekly open and monthly open:** cut entirely; not day-trade-relevant.
+- **VX-futures live proxy** (open question 2 below): do not build it. Prior-close VIX is sufficient, and VIX itself sits behind ATR, not beside it (borderline cut from the glance entirely).
+- **Cross-asset / ES:** stays out. ES leads NQ on a seconds-to-minutes basis (a live-tape signal), not a 07:00 item; at 07:00 it is redundant with the NQ overnight story.
+- **Any directional language or bias:** hard rule. Aligns with the repo-wide "no predicting market direction" anti-goal. The brief reports STATE, never a lean. This is the number-one source of pre-market overconfidence.
+- **Win-rate / P&L / streaks:** never in the morning brief; that is an anchor that feeds revenge or overconfidence. Performance analysis belongs in the post-hoc reports, kept on a separate surface.
+- **Precision beyond 1 point**, raw unfiltered calendar dumps, and multiple pivot/Fib systems: all out.
+
+### Behavioral guards (ADHD, ~1 year experience)
+
+- Lead with the verdict, cap the surface area (one screen, then drill-down).
+- The brief only ever REDUCES risk, never excites. Neutral, flat tone; no "big move setting up." It is a pre-flight checklist, not a hype reel.
+- Convert events into clock-time no-trade windows (timer-able), to compensate for time-blindness.
+- On RED/YELLOW days, a standing one-line reminder: "First loss is information, second loss is your signal to slow down. Daily stop = N." Pre-commit the limit before the emotional state arrives.
+- Normalize standing aside: "On a CPI morning, doing nothing until 08:35 is a winning decision."
+- Identical layout every day so the one thing that changed (the red event line, the YELLOW badge) pops.
+
+### Config dependency
+
+The Risk Mode badge and the sizing line require Allie's PRE-CONFIGURED per-trade risk and daily-stop values. The brief echoes her numbers, it never invents aggressive ones; if unset, it says so and shows nothing rather than guessing. This maps onto the stop-methodology and sizing open questions already parked in `RESEARCH_PLAN.md` section 8 (items 1-2).
+
+---
+
 ## 4. Dependencies and decisions that gate the build
 
 1. **Bar source must include session-tagged Globex data plus settlements.** Resolve `PROJECT_KICKOFF.md` 4.3 with this stricter requirement in mind. This is the single blocking decision.
