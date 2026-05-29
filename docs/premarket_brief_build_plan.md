@@ -27,7 +27,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 0 — Decisions, scaffold, and hardening baseline (Days 1-3)
+## Phase 0 - Decisions, scaffold, and hardening baseline (Days 1-3)
 
 **Goal**: Repo skeleton exists; decisions are made; CI, secrets hygiene, and config validation run green on an empty app. (Expanded per readiness G11s/G11j/G11t/G13/G14b/G22; secrets posture moved here from Phase 5.)
 
@@ -46,7 +46,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 1 — Databento bar feed vertical slice (Days 3-6) — THE BLOCKER
+## Phase 1 - Databento bar feed vertical slice (Days 3-6) - THE BLOCKER
 
 **Goal**: Full-session bars AND official settlements land in DuckDB from Databento and are verifiable by eye. Nothing else is built until this works.
 
@@ -64,7 +64,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 2 — Remaining feeds (Days 7-9)
+## Phase 2 - Remaining feeds (Days 7-9)
 
 **Goal**: VIX, econ calendar, earnings all fetch and parse independently, behind tests.
 
@@ -80,7 +80,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 3 — Brief engine (Days 10-13)
+## Phase 3 - Brief engine (Days 10-13)
 
 **Goal**: Compute a full `BriefSnapshot` from the database. No UI yet. This is where the quant/risk content spec becomes code.
 
@@ -101,7 +101,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 3.5 — Allie design review (Day 13-14) — GATE (G16)
+## Phase 3.5 - Allie design review (Day 13-14) - GATE (G16)
 
 **Goal**: Validate the UX on a prototype with the actual end user BEFORE any Phase 4 code. ADHD-friendliness is not code-reviewable.
 
@@ -114,7 +114,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 4 — Dashboard + email (Days 15-18)
+## Phase 4 - Dashboard + email (Days 15-18)
 
 **Goal**: The brief is visible at `premarket.home` and delivered by 07:00 email, in the ADHD-friendly layout. **Implement to the full visual spec in `premarket_brief_ux_design.md`** (design tokens, component anatomy, the SVG price ladder, states, email variant).
 
@@ -131,7 +131,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 5 — Scheduler, recovery, deployment, alerting (Days 18-20)
+## Phase 5 - Scheduler, recovery, deployment, alerting (Days 18-20)
 
 **Goal**: The 07:00 ET job fires unattended, recovers from a missed run, and fails LOUDLY.
 
@@ -148,7 +148,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 6 — Validation, rollout, and ship (Days 22-25)
+## Phase 6 - Validation, rollout, and ship (Days 22-25)
 
 **Goal**: Allie relies on it on a real trading morning, and it is operable for the long run.
 
@@ -206,12 +206,12 @@ A CME-holiday day rendering the correct "no session" state counts as a pass.
 
 ## Process skills to drive it
 
-- `superpowers:brainstorming` — before locking any phase's approach if it is unclear.
-- `superpowers:writing-plans` then `superpowers:executing-plans` — turn this doc into a tracked checklist and execute with review checkpoints.
-- `superpowers:test-driven-development` — required discipline per phase.
-- `superpowers:using-git-worktrees` — isolate the build.
-- `superpowers:requesting-code-review` / `superpowers:receiving-code-review` — the per-phase review gate.
-- `superpowers:finishing-a-development-branch` — when the service is done and ready to integrate.
+- `superpowers:brainstorming` - before locking any phase's approach if it is unclear.
+- `superpowers:writing-plans` then `superpowers:executing-plans` - turn this doc into a tracked checklist and execute with review checkpoints.
+- `superpowers:test-driven-development` - required discipline per phase.
+- `superpowers:using-git-worktrees` - isolate the build.
+- `superpowers:requesting-code-review` / `superpowers:receiving-code-review` - the per-phase review gate.
+- `superpowers:finishing-a-development-branch` - when the service is done and ready to integrate.
 
 ## Critical-path summary
 
