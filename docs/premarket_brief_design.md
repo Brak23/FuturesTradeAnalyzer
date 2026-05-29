@@ -34,13 +34,9 @@ This is the whole game. To separate "yesterday's range" from "the overnight move
 | **History depth: full current calendar month** of intraday bars (or correctly-defined daily bars) | Monthly and weekly high/low lookbacks | Monthly H/L is wrong or unavailable |
 | **Resolution: 1-min or 5-min** | Plenty for levels and overnight VWAP | None; finer is unnecessary |
 
-Candidate sources (from `PROJECT_KICKOFF.md` 4.3), ranked for THIS use:
-- **NinjaTrader 8** if Allie's data feed includes ETH: local, free, session-aware. Best fit if she already runs NT for execution.
-- **Paid feed (Databento / similar)**: clean session tags and settlements out of the box.
-- **TradingView export**: workable but manual and history-limited.
-- **RTH-only broker exports**: disqualified for this feature.
+**Source: DECIDED -> Databento `GLBX.MDP3`** (see `premarket_brief_vendor_research.md` for the comparison and `premarket_brief_architecture.md` section 0 for the cascade). Bars via the `ohlcv-1m` schema (full Globex session); official settlements + open interest via the `statistics` schema; continuous front-month symbology `NQ.c.0`; Historical API only. Pay-as-you-go, single-instrument cost is small. The cheapest fallback (NinjaTrader + local ETH feed) is documented but not chosen.
 
-Because MNQ and NQ share the underlying, Feed A only needs ONE instrument's bars (use NQ, the more liquid full-size contract, as the reference series; label output for both).
+Because MNQ and NQ share the underlying, Feed A only needs ONE instrument's bars (use NQ via `NQ.c.0` as the reference series; label output for both).
 
 ### Feed C: Volatility reference (recommended)
 
@@ -167,8 +163,9 @@ Because it is decoupled from the rubric, it is a clean standalone deliverable. I
 
 ## 6. Open questions for Allie / Bryce
 
-1. **Bar source**: does Allie's NinjaTrader feed include ETH (overnight) bars and settlements? If yes, NT is the cheapest path. If not, which paid feed.
-2. **VIX exactness**: is prior-close VIX good enough at 07:00, or do we want VX-futures-overnight as a live proxy?
-3. **Calendar / earnings feed**: pick a source (API vs maintained list) and confirm cost fits the tooling budget (`PROJECT_KICKOFF.md` 5.1).
+1. **Bar source**: RESOLVED -> Databento `GLBX.MDP3` (`ohlcv-1m` + `statistics`, `NQ.c.0`). See `premarket_brief_vendor_research.md`.
+2. **VIX exactness**: prior-close VIX is sufficient at 07:00; the VX-futures live proxy is cut (per section 3A). Closed.
+3. **Calendar / earnings feed**: FMP free tier recommended; confirm registration and that it fits the tooling budget (`PROJECT_KICKOFF.md` 5.1).
 4. **Delivery details**: which email account sends; same Google account as the forward-capture Sheet; one combined morning email or separate sections.
 5. **Average overnight range baseline**: trailing how many sessions (proposed: 20 prior sessions, RTH-calendar aware).
+6. **Backfill depth** (new, from the Databento decision): how many years of history to seed at first run (recommend 3-5 years for stable ATR/monthly baselines; one-time, small cost).

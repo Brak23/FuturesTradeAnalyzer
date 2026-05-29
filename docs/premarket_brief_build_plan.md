@@ -18,7 +18,7 @@
 - **Isolation.** Build in a git worktree (`superpowers:using-git-worktrees`) or a dedicated branch; this service is a new repo under `~/docker/premarket/`, separate from FuturesTradeAnalyzer.
 
 ### Who decides vs who builds
-The three open decisions in `premarket_brief_architecture.md` section 8 (Feed A vendor, SMTP path, FMP tier) are Bryce's calls and gate Phase 1. Agents build once those are set.
+**Feed A is decided: Databento `GLBX.MDP3`** (`ohlcv-1m` bars + `statistics` settlements, continuous symbol `NQ.c.0`, Historical API). See `premarket_brief_vendor_research.md`. Remaining open calls (`premarket_brief_architecture.md` section 8): SMTP path, FMP tier, and backfill depth. None block Phase 0; backfill depth is needed before Phase 1's seed step.
 
 ### Dispatch note
 Agent names below are the subagent types available in this environment. Dispatch them via the Agent tool. Independent steps within a phase can run in parallel (one message, multiple Agent calls). If you want fully deterministic multi-agent orchestration with fan-out and review loops, drive it with a Workflow (opt-in) using these same agent assignments.
@@ -31,7 +31,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 | Step | What | Agent |
 |---|---|---|
-| 0.1 | Confirm Feed A vendor (Databento vs NT8), SMTP path, FMP tier | Bryce (decision) |
+| 0.1 | Feed A = Databento (DONE). Register Databento + FMP accounts, get API keys; pick SMTP path + backfill depth | Bryce (decision) |
 | 0.2 | Scaffold `~/docker/premarket/app/` tree, `pyproject.toml` (uv), `ruff` + `pytest` config, `.python-version`, `.env.example`, `.gitignore` | `voltagent-dev-exp:build-engineer` or `voltagent-lang:python-pro` |
 | 0.3 | `src/config.py` with all named constants (session boundaries, ATR/ONR lookbacks, `DST_ZONE`, `NDX_COMPONENTS`) | `voltagent-lang:python-pro` |
 | 0.4 | `src/contracts/bar_source.py` protocol (adapt from FuturesTradeAnalyzer) | `voltagent-core-dev:backend-developer` |
@@ -41,19 +41,21 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 1 — Bar feed vertical slice (Days 3-6) — THE BLOCKER
+## Phase 1 — Databento bar feed vertical slice (Days 3-6) — THE BLOCKER
 
-**Goal**: Session-tagged overnight bars + settlements land in DuckDB and are verifiable by eye. Nothing else is built until this works.
+**Goal**: Full-session bars AND official settlements land in DuckDB from Databento and are verifiable by eye. Nothing else is built until this works.
 
 | Step | What | Agent |
 |---|---|---|
-| 1.1 | `src/feeds/bars_databento.py` (or `bars_nt8.py`) implementing `BarSource`; fetch one week of NQ bars | `voltagent-data-ai:data-engineer` (lead) + `voltagent-lang:python-pro` |
-| 1.2 | `src/store/db.py` + `schema.sql`: DuckDB init, `bars` + `settlements` tables | `voltagent-data-ai:database-optimizer` |
-| 1.3 | `src/ingest/normalizer.py`: UTC normalization, session tagging (RTH/ETH), OHLC integrity DQ | `voltagent-data-ai:data-engineer` |
-| 1.4 | `src/brief/session.py`: `is_rth()`/`is_eth()`, CME halt + holiday calendar, `ZoneInfo` boundaries | `voltagent-lang:python-pro` |
-| 1.5 | `tests/test_session.py` (DST March/Nov boundaries, CME holidays) + the **verification test** (continuous 18:00 ET -> 17:00 ET series with only the halt gap) | `voltagent-qa-sec:test-automator` |
+| 1.1 | `src/feeds/bars_databento.py`: `DatabentoBarSource(BarSource)` using `GLBX.MDP3`, symbol `NQ.c.0`, Historical API. Fetch one week of `ohlcv-1m` AND the matching `statistics` settlement/OI records | `voltagent-data-ai:data-engineer` (lead) + `voltagent-lang:python-pro` |
+| 1.2 | `src/ingest/cost_guard.py`: wrap requests with `metadata.get_cost`, abort above `MAX_DATABENTO_REQUEST_USD`, log actual cost | `voltagent-lang:python-pro` |
+| 1.3 | `src/store/db.py` + `schema.sql`: DuckDB init, `bars` (with `contract`, `source`) + `settlements` (settlement + open_interest, from statistics) tables | `voltagent-data-ai:database-optimizer` |
+| 1.4 | `src/ingest/normalizer.py`: UTC normalization, session tag (RTH/ETH from ts), resolved-contract stamp, OHLC integrity DQ | `voltagent-data-ai:data-engineer` |
+| 1.5 | `src/ingest/backfill.py`: one-time historical seed of bars + settlements via batch/`get_range` (depth per the backfill-depth decision) | `voltagent-data-ai:data-engineer` |
+| 1.6 | `src/brief/session.py`: `is_rth()`/`is_eth()`, CME halt + holiday calendar, `ZoneInfo` boundaries | `voltagent-lang:python-pro` |
+| 1.7 | `tests/test_session.py` (DST March/Nov, CME holidays) + the **verification test**: `NQ.c.0` `ohlcv-1m` shows a continuous 18:00 ET -> 17:00 ET series with only the halt gap, AND a `statistics` settlement row exists for that contract/date | `voltagent-qa-sec:test-automator` |
 
-**Gate (HARD KILL)**: bars query back from DuckDB with a correct `session` split and the verification test passes. If no available source yields session-tagged Globex bars + settlements after a genuine attempt, the brief cannot be built as specified. Stop and revisit Feed A.
+**Gate (HARD KILL)**: bars + settlements query back from DuckDB with a correct `session` split, a resolved `contract`, and the verification test passes. If Databento does not return the overnight bars or the settlement record, stop and fix symbology/schema (`NQ.c.0`, `statistics`) before building further.
 
 ---
 
@@ -145,7 +147,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 | Component | Primary agent | Support / review |
 |---|---|---|
 | Repo scaffold, tooling, CI | `voltagent-dev-exp:build-engineer` | `voltagent-lang:python-pro` |
-| Bar feed + ingestion (Feed A) | `voltagent-data-ai:data-engineer` | `voltagent-lang:python-pro` |
+| Databento bar + settlement feed (Feed A) | `voltagent-data-ai:data-engineer` | `voltagent-lang:python-pro` |
 | DuckDB schema + queries | `voltagent-data-ai:database-optimizer` | |
 | Session / DST / CME-calendar logic | `voltagent-lang:python-pro` | `voltagent-qa-sec:test-automator` |
 | Calendar / earnings / VIX feeds | `voltagent-data-ai:data-engineer` | |
