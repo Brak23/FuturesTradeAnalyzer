@@ -46,7 +46,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 1 - Databento bar feed vertical slice (Days 3-6) - THE BLOCKER
+## Phase 1 - Databento bar feed vertical slice (Days 4-7) - THE BLOCKER
 
 **Goal**: Full-session bars AND official settlements land in DuckDB from Databento and are verifiable by eye. Nothing else is built until this works.
 
@@ -64,7 +64,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 2 - Remaining feeds (Days 7-9)
+## Phase 2 - Remaining feeds (Days 8-10)
 
 **Goal**: VIX, econ calendar, earnings all fetch and parse independently, behind tests.
 
@@ -80,13 +80,13 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 3 - Brief engine (Days 10-13)
+## Phase 3 - Brief engine (Days 11-14)
 
 **Goal**: Compute a full `BriefSnapshot` from the database. No UI yet. This is where the quant/risk content spec becomes code.
 
 | Step | What | Agent |
 |---|---|---|
-| 3.0 | **Risk Mode decision table (G8)**: risk-manager produces a numeric table over (catalyst: none/med/high) x (gap-ATR: <0.2 / 0.2-1.0 / >1.0) x (VIX: low/elevated/high) -> GREEN/YELLOW/RED, with thresholds written into `config.py`. PRECEDES 3.5 impl | `voltagent-domains:risk-manager` |
+| 3.0 | **Risk Mode decision table (G8)**: risk-manager produces a numeric table over (catalyst: none/med/high) x (gap-ATR: <0.2 / 0.2-1.0 / >1.0) x (VIX: low/elevated/high) -> GREEN/YELLOW/RED, with thresholds written into `config.py`. PRECEDES the Risk Mode impl step 3.5 within this phase (not the Phase 3.5 design-review gate) | `voltagent-domains:risk-manager` |
 | 3.1 | `src/brief/levels.py` (PDH/PDL, ONH/ONL, ON VWAP, conditional weekly/monthly H/L, settlement-based gap; **ATR uses RTH-only bars, G1**) | `voltagent-lang:python-pro` |
 | 3.2 | `src/brief/overnight.py` (net change, ON range vs trailing-20 avg using `BASELINE_SESSION_COUNT` holiday/half-day-excluded, **thresholds from config G7**, trend-vs-chop) | `voltagent-lang:python-pro` |
 | 3.3 | `src/brief/volatility.py` (ATR(14), gap-as-fraction-of-ATR, VIX expected move) | `voltagent-lang:python-pro` |
@@ -101,7 +101,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 3.5 - Allie design review (Day 13-14) - GATE (G16)
+## Phase 3.5 - Allie design review (Day 15) - GATE (G16)
 
 **Goal**: Validate the UX on a prototype with the actual end user BEFORE any Phase 4 code. ADHD-friendliness is not code-reviewable.
 
@@ -114,7 +114,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 4 - Dashboard + email (Days 15-18)
+## Phase 4 - Dashboard + email (Days 16-19)
 
 **Goal**: The brief is visible at `premarket.home` and delivered by 07:00 email, in the ADHD-friendly layout. **Implement to the full visual spec in `premarket_brief_ux_design.md`** (design tokens, component anatomy, the SVG price ladder, states, email variant).
 
@@ -131,7 +131,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 5 - Scheduler, recovery, deployment, alerting (Days 18-20)
+## Phase 5 - Scheduler, recovery, deployment, alerting (Days 20-22)
 
 **Goal**: The 07:00 ET job fires unattended, recovers from a missed run, and fails LOUDLY.
 
@@ -148,7 +148,7 @@ Agent names below are the subagent types available in this environment. Dispatch
 
 ---
 
-## Phase 6 - Validation, rollout, and ship (Days 22-25)
+## Phase 6 - Validation, rollout, and ship (Days 23-25 build, then a ~1-week unattended soak)
 
 **Goal**: Allie relies on it on a real trading morning, and it is operable for the long run.
 
@@ -215,4 +215,8 @@ A CME-holiday day rendering the correct "no session" state counts as a pass.
 
 ## Critical-path summary
 
-Feed A (Phase 1) is the only hard technical blocker; everything downstream depends on session-tagged bars + settlements. The vertical-slice MVP is Phases 1-4 (bars -> compute -> dashboard + email). Phase 3.5 (Allie design review) gates Phase 4. Phases 5-6 make it secure, unattended-reliable, and validated. Estimated **~25-28 days** at half-time (the folded-in correctness, hardening, and human-loop work added ~4-6 days over the original 22). The bar-feed slice and the five build-blockers (G1/G3/G11/G12/G16) are front-loaded deliberately. The five blockers are spread Phase 1 (G3), Phase 3 (G1), Phase 3.5 (G16), Phase 5 (G11/G12); none can be deferred to "after ship."
+Feed A (Phase 1) is the only hard technical blocker; everything downstream depends on session-tagged bars + settlements. The vertical-slice MVP is Phases 1-4 (bars -> compute -> dashboard + email). Phase 3.5 (Allie design review) gates Phase 4. Phases 5-6 make it secure, unattended-reliable, and validated.
+
+Schedule: phases run sequentially (each gate must pass before the next starts), Day 1 through Day 25 of active build. Definition-of-Done criterion #4 then requires **5 real trading mornings** of unattended operation, which is roughly one additional calendar week of soak with no active dev, putting the all-in estimate at **~25 active build-days / ~28 calendar days** at half-time (the folded-in correctness, hardening, and human-loop work added ~4-6 days over the original 22).
+
+The five build-blockers (G1/G3/G11/G12/G16) are front-loaded deliberately: **G3** (DQ gate) first surfaces in Phase 1 and completes in Phase 3; **G1** (correctness oracle) in Phase 3; **G16** (Allie design review) is the Phase 3.5 gate; **G11** (dashboard auth) in Phase 5; **G12** (spend cap) begins in Phase 1 (request guard + MTD table) and completes in Phase 5 (recovery cap + alerting). None can be deferred to "after ship."
