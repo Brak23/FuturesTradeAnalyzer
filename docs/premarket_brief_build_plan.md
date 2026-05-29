@@ -6,6 +6,8 @@
 
 **Working model**: This is a `~/docker/premarket/` service on homehub, built test-first, in vertical slices, with a review gate at the end of each phase. The bar feed (Feed A) is the only hard blocker and comes first.
 
+> **Read alongside `premarket_brief_readiness.md`** (the gap register + service Definition of Done). It adds gates and tasks this phase list must absorb: a Phase 0 hardening/scaffold expansion (pydantic-settings, CI, gitleaks, log redaction, StrictUndefined), a new **Phase 3.5** Allie design-review gate, correctness/DQ work in Phase 3 (golden-file oracle, freshness gate, edge-case matrix, Risk Mode decision table), dashboard auth + monthly spend cap in Phase 5, and UAT + rollout + DR + DoD in Phase 6. The five build-blockers there are G1, G3, G11, G12, G16.
+
 ---
 
 ## 0. How to run this build
