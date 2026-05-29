@@ -343,7 +343,7 @@ For smaller datasets, fall back to **combinatorial purged cross-validation** (Lo
 
 ### Rules
 - A feature must pass **both** IC and expectancy thresholds to earn the higher weight.
-- The rubric uses **no more than 8 features**. Driven by sample-size floor: 8 features × ~30 trades/feature lower bound = 240 minimum, aligned with the dataset target.
+- The rubric uses **no more than 8 features**. This is a regularization ceiling against overfitting, NOT a sample-size floor. **(PR-REVIEW-P1)** The "8 × 30 = 240" figure is the folk-statistics heuristic RESEARCH_PLAN.md §1.3 explicitly debunks; do not cite it as a detectability argument. The binding sample-size gate is the M0 MDES readout and the §1.3 power math (IC = 0.10 needs N ≈ 800). See `PLAN_REVIEW.md` §0–§1.
 - Weight sign follows the feature's IC sign in-sample.
 - Grade thresholds: A+ = top 20% of rubric scores in-sample, A = next 30%, B = bottom 50%. Re-validated each walk-forward window.
 - Weights and thresholds live in versioned YAML under `rubric/versions/`. Once promoted, a version is never edited; new analyses produce a new version.

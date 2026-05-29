@@ -368,7 +368,7 @@ Proposed translation from analytics to rubric weights:
 
 **Rules**:
 - A feature must pass BOTH IC and expectancy thresholds to get the higher weight.
-- Total rubric uses **no more than 8 features**. This is a regularization choice driven by the sample size argument in 1.3 (rule of thumb: at least 30 trades per feature in the rubric, capping at 8 means we need 240 trades minimum, which aligns with section 3.1).
+- Total rubric uses **no more than 8 features**. This is a regularization ceiling, NOT a power floor. **(PR-REVIEW-P1)** The "30 trades per feature → 240" justification used in v0.1 is the same folk-statistics heuristic section 1.3 debunks, and must not be cited as a detectability argument. The honest basis for the cap is events-per-variable / shrinkage logic to limit overfitting; 8 is a pragmatic ceiling. The real sample-size gate lives in the M0 MDES readout (section 7, M0) and section 1.3, which require N ≈ 800 to detect IC = 0.10. See `PLAN_REVIEW.md` §0–§1.
 - Direction (sign) of weight follows the feature's IC sign in-sample.
 - Grade thresholds: A+ = top 20% of rubric scores in-sample, A = next 30%, B = bottom 50%. Re-validated each walk-forward window.
 - Thresholds and weights are **stored in versioned YAML** per `CLAUDE.md` and never changed without a documented decision and re-validation.
@@ -385,6 +385,14 @@ Proposed translation from analytics to rubric weights:
 | Embargo | 1 trading day between train and test | Prevents leakage from features computed near the boundary |
 | Purge | None on point-in-time features. Required if any feature uses forward-looking smoothing (which it should not) | |
 
+**(PR-REVIEW-P3) CPCV from the start, not as a fallback.** At ~25 trades/month, a 1-month test window holds ~25 trades across 3 grade buckets (~5 A+/window), giving a bucket-mean CI near ±1R. The §5.7 promotion deltas (A+ minus A ≥ 0.3R, CI excluding zero) cannot be met by construction at that resolution — not for lack of edge, but for lack of measurable resolution. So **combinatorial purged cross-validation (Lopez de Prado 2018) is the primary validator**, with rolling-origin reported as a descriptive supplement. **Report trades-per-fold prominently**; any fold with < 30 trades is descriptive, not inferential, and must be labeled as such.
+
+**(PR-REVIEW-P2) Locked final hold-out.** Carve the most-recent **N trades** (target: the last ~3 months, never fewer than the largest single test fold) into a hold-out that is touched **exactly once**, after the rubric is frozen at M6, with no opportunity to revise. Feature selection (M4) and rubric construction (M6) never see it. It is the only uncontaminated OOS number in a small-data project; everything flowing through the iterated walk-forward is partially in-sample via analyst choices.
+
+**(PR-REVIEW-P2) Frozen analysis pre-registration.** Before any feature IC is computed (end of M0), commit a hashed `analysis_preregistration.yaml` fixing the feature list, the canonical label horizon, the test, and the thresholds. A fitness function asserts the executed analysis matches the registration; deviations are logged, not silently absorbed. This closes the garden-of-forking-paths that the 20 hazards do not otherwise prevent.
+
+**(PR-REVIEW-P4) Project-lifetime test ledger.** Maintain a persisted count of every statistical test run across all milestones AND all future quarterly refits, in a tracked `test_ledger.json`. FDR and PBO corrections read from it, so multiplicity is controlled across the life of the project, not just within one notebook. Without this, two years of quarterly refits accumulate hundreds of effective comparisons at an uncontrolled project-level false-discovery rate. This ledger is also the trial count the deflated Sharpe ratio requires (§5.2); if it is not maintained, drop DSR in favor of PBO (QH20).
+
 ### 5.7 Rubric promotion (v_n to v_{n+1})
 
 A new rubric version is promoted only when **all** of the following hold:
@@ -394,10 +402,17 @@ A new rubric version is promoted only when **all** of the following hold:
 3. A minus B spread is >= 0.15R median, CI excluding zero.
 4. OOS A+ expectancy is statistically indistinguishable (CI overlap) from in-sample A+ expectancy. Catches overfitting.
 5. New rubric beats prior rubric (v_n) on the most recent walk-forward window's OOS data by at least 0.1R on A+ expectancy.
-6. Counterfactual test: applied to setups not taken (once we have that dataset), simulated forward returns show same monotonicity.
+6. Counterfactual test: applied to setups not taken (once we have that dataset), simulated forward returns show same monotonicity. **(PR-REVIEW-P6)** Report this at three slippage assumptions — half-spread, one-spread, two-spread. If monotonicity holds only at half-spread, it is not robust and the criterion fails: the setups Allie skipped are plausibly the thin/fast ones with worse fills, biasing the counterfactual edge upward.
 7. Sample size for the change is documented and meets section 3.1 floor.
+8. **(PR-REVIEW-P2) Locked final hold-out confirms.** After the rubric is frozen, the most-recent untouched hold-out (§5.6) shows the same bucket monotonicity. This number is reported once, with no opportunity to revise the rubric in response.
 
 Any change failing any of these stays in a branch and does not become canonical.
+
+**(PR-REVIEW-P6) Canonical edge definition for go/no-go.** Edge is defined several ways across this plan (Q1 net R, Q2 IC, Q3 monotonic OOS, Q4 conviction IC, Q5 regime-conditional IC). For the deployment decision the canonical definition is **Q3 (monotonic OOS bucket expectancy) AND PBO < 0.5 (QH20)**. Q1/Q2 are upstream gates; Q4/Q5 are diagnostics. A partial pass (e.g. features have IC but buckets are not monotonic OOS — the most likely outcome at this sample size) is a NO-GO and may not be argued into a GO.
+
+**(PR-REVIEW-P6) Negative controls (plural).** Inject **3–5** synthetic random features with no possible relationship to outcome, not one (QH17). If more than the FDR-expected number clear, the pipeline leaks. A single control is one Bernoulli trial and cannot distinguish "unlucky" from "broken."
+
+**(PR-REVIEW-P6) Label-horizon multiplicity.** FDR is applied across features, not feature×horizon. Either bind the canonical horizon to 30 minutes in the pre-registration (CLAUDE.md already names 30-min as primary — make it binding) or correct across all feature×horizon combinations (4 × 25 = 100 tests, not 25).
 
 ---
 
@@ -409,7 +424,7 @@ Any change failing any of these stays in a branch and does not become canonical.
 | R2 | **Look-ahead bias** in features | Medium | High | Point-in-time replay test: recompute features as of entry minus 1 tick; compare to "as of now." | Feature code reviewed for any use of close-only or future data. `barstate.isconfirmed` in Pine. Strict timestamp guard in Python feature functions. |
 | R3 | **Selection bias** (taken trades only) | Certain | High | No detection possible without counterfactual data | Counterfactual capture (forward + backward) as a parallel high-priority track |
 | R4 | **Regime change** between IS and OOS | High | Medium | Rolling OOS performance trend; Q6 result | Rolling walk-forward sees this. Regime-conditional rubrics if Q5 supports. Recency-weighted training. |
-| R5 | **Hawthorne effect** (measurement changes behavior) | High | Medium | Compare trade quality metrics pre/post the start of conscious grading | Blind grading (compute grade post-trade, do not show pre-entry) during the study. Reveal only after baseline established. |
+| R5 | **Hawthorne effect** (measurement changes behavior) | High | Medium | Compare trade quality metrics pre/post the start of conscious grading | Blind grading (compute grade post-trade, do not show pre-entry) during the study. Reveal only after baseline established. **(PR-REVIEW-P7)** Note this conflicts with the real-time decision-support job (§1.2): once Allie acts on a live grade (Phase 7+), the trades she generates for the quarterly refit (Phase 8) are endogenous to the rubric, making every later "validation" partly self-fulfilling. Mitigation: keep a permanently-blind control stream (setups graded but where behavior is logged independent of the grade) so every refit retains an exogenous comparison. |
 | R6 | **Feature leakage** (feature correlated with outcome via shared cause) | Medium | High | Audit each feature for dependence on exit or post-entry data; correlate features with stop and target placement | Code review on every feature function. Test with synthetic data where ground truth is known. |
 | R7 | **Multiple-comparisons false positives** | Certain | High | Naive p-values across 25+ features will produce false discoveries | BH-FDR throughout. Deflated Sharpe for multi-rubric comparison. Report number of tests on every result. |
 | R8 | **Sample size insufficient** for desired effect | High | High | Power calculations in section 2 | State the floor effect size detectable at current N on every result. Refuse to claim significance below it. |
@@ -438,8 +453,11 @@ Time estimates assume ~half-time effort.
 - **Objective**: Answer the open questions in section 8. Count actual trades by month, instrument, setup.
 - **Inputs**: Allie's answers. Tradezella trade export.
 - **Methods**: Read trade log. Tabulate. Interview Allie.
-- **Deliverable**: `notebooks/00_dataset_audit.ipynb`. Memo of decisions and counts. Updated open questions list.
-- **Decision gate**: Do we have enough taken trades to start (target 200+)? If not, this entire research phase pauses and we go straight to forward-capture infrastructure (M3-only) to accumulate data.
+- **MDES readout (PR-REVIEW-P0, highest-leverage addition)**: compute and print, at the TOP of the M0 memo, the **minimum detectable effect size** (in R and in IC) at the actual post-audit stable-rules trade count, given sigma ≈ 1.2R, alpha after BH-FDR across the planned feature count, beta = 0.20. This converts the project's central risk into a week-1 readout instead of a week-9 (M7) surprise.
+  - If **MDES > ~0.4–0.5R** (near-certain at 200–400 trades): the memo headline declares the walk-forward-validated rubric a **stretch deliverable**, and the **primary MVP is re-scoped to the forward-capture + counterfactual system** (M3) plus Q1 expectancy and exploratory univariate. This is not a failure; it matches CLAUDE.md's own "deep post-hoc analysis" framing.
+  - If MDES is small enough to support the §5.7 promotion thresholds, proceed toward the rubric as planned.
+- **Deliverable**: `notebooks/00_dataset_audit.ipynb`. Memo of decisions and counts, **led by the MDES readout**. Updated open questions list. The frozen `analysis_preregistration.yaml` (PR-REVIEW-P2) is committed at the end of M0, before any feature IC is computed.
+- **Decision gate**: Do we have enough taken trades to start (target 200+)? If not, this entire research phase pauses and we go straight to forward-capture infrastructure (M3-only) to accumulate data. **Separately, the MDES readout decides whether the rubric is the MVP or a stretch goal** — a 200-trade dataset can pass the start gate and still fail the rubric-feasibility gate.
 - **Kill criteria**: <100 taken trades, or fewer than 6 months of consistent rules. In that case, project becomes "build the capture system and revisit in 6 months."
 
 ### M1: Data ingestion and quality (Week 2)
