@@ -138,7 +138,9 @@ Selected by High importance × Weak evidence. All five testable in under 4 hours
 3. Allie marks every rule change date she remembers (be ruthless; partial recall is worse than no recall).
 4. Compute trade count in the longest stable-rules window.
 
-**Validated**: At least one stable-rules window contains >= 200 trades AND spans >= 6 months. Walk-forward is feasible.
+**(PR-REVIEW-P1)** The 200-trade bar here is a *project-can-start* threshold, NOT a *rubric-is-buildable* threshold. They are different and the docs previously conflated them. Per RESEARCH_PLAN.md §1.3, detecting IC = 0.10 after FDR needs N ≈ 800 and a top/bottom-quintile 0.3R lift needs ~1,250–2,000. So 200 trades means "enough to run Q1 expectancy and underpowered univariate exploration," not "enough to validate a weighted rubric." The M0 MDES readout (RESEARCH_PLAN.md §7 M0) states the detectable effect size at the actual N and gates the rubric deliverable accordingly. See `PLAN_REVIEW.md` §0.
+
+**Validated (project can start)**: At least one stable-rules window contains >= 200 trades AND spans >= 6 months. Q1 + exploratory univariate are feasible. A *validated rubric* still requires the MDES check to clear, which at 200–400 trades it almost certainly will not — expect the forward-capture system to be the real MVP.
 
 **Soft pass**: 100-200 trades in the longest stable window. MVP narrows; only QH16-protected (tertile-fallback) analyses possible; walk-forward via combinatorial purged CV instead of rolling.
 

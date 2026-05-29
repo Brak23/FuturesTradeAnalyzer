@@ -321,6 +321,7 @@ Neutral: anything else worth noting.
 | ADR-0008 | Local-laptop monolith over cloud / microservices | Scope decision; rules out an entire class of complexity for the foreseeable horizon |
 | ADR-0009 | Order flow classification method (Lee-Ready default, tick-rule fallback) | Quant-methodology decision (QH8); affects every downstream conclusion that uses cumulative delta |
 | ADR-0010 | Net-of-costs as primary metric, gross as reporting only | Quant-methodology decision (QH1); affects every threshold and gate in the project |
+| ADR-0011 | **Continuous-contract construction / bar-adjustment method (PR-REVIEW-P5)** | One-way decision currently undefined ("back-adjusted or ratio-adjusted", RESEARCH_PLAN.md §3.3). Back-adjustment distorts historical absolute price and silently corrupts ATR-normalized distance features and percentage forward-returns — the dominant feature family for MNQ/NQ. Decide **per-feature**: session-anchored features (VWAP, cum-delta, rvol, intraday levels) never cross a roll and want un-adjusted front-month bars; only multi-day lookbacks (ATR percentile vs 60 days, prior-day levels) need a continuous series. Write before any feature code in Phase 4. |
 
 **ADRs are versioned in git, never deleted.** Superseded ones are marked superseded with a link to the replacement. This is the project's architectural history.
 
@@ -411,9 +412,12 @@ Phases map 1:1 to `RESEARCH_PLAN.md` milestones with the engineering tasks calle
 - `notebooks/00_dataset_audit.ipynb`: count trades by month, instrument (MNQ vs NQ), setup, account context. Plot timeline. Identify rule-change dates.
 - **QH13 trade-unit policy**: document Tradezella's partial-fill aggregation policy currently in use; record it in the memo.
 - **QH14 logging-gap audit**: for one sample month, cross-check Tradezella trade count vs broker statement count. Report % gap.
-- Memo: `data/reports/M0_dataset_audit.md`.
+- **MDES readout (PR-REVIEW-P0)**: compute the minimum detectable effect size (R and IC) at the actual stable-rules trade count; print it as the M0 memo headline. If MDES > ~0.4–0.5R, the memo declares the walk-forward-validated rubric a stretch deliverable and re-scopes the primary MVP to the forward-capture + counterfactual system (Phase 3) plus Q1/exploratory univariate. See RESEARCH_PLAN.md §7 M0 and `PLAN_REVIEW.md` §0.
+- **Freeze pre-registration (PR-REVIEW-P2)**: commit hashed `analysis_preregistration.yaml` (feature list, canonical label horizon, test, thresholds) before any feature IC is computed. New fitness function asserts executed analysis matches it.
+- **Initialize test ledger (PR-REVIEW-P4)**: create `test_ledger.json`; every statistical test across all milestones and future refits increments it; FDR/PBO read from it.
+- Memo: `data/reports/M0_dataset_audit.md`, **led by the MDES readout**.
 
-**Kill criterion**: <100 taken trades or <6 months of consistent rules. If hit, project pauses; only counterfactual / forward-capture (Phase 3) proceeds. Additional soft warning: logging gap >5% triggers a stratification plan.
+**Kill criterion**: <100 taken trades or <6 months of consistent rules. If hit, project pauses; only counterfactual / forward-capture (Phase 3) proceeds. Additional soft warning: logging gap >5% triggers a stratification plan. **Rubric-feasibility gate (separate from the start gate)**: if the MDES readout shows the §5.7 promotion thresholds are undetectable at the available N (near-certain at 200–400 trades), the rubric becomes a stretch goal and the forward-capture system is the MVP — this is a successful M0 outcome, not a failure.
 
 ### Phase 2 — M1 Ingest + DQ (Week 2)
 
