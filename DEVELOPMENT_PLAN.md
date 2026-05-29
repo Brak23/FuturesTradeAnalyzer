@@ -672,6 +672,7 @@ Ranked by **value × ease**, not just one or the other.
 | E3 | **Live grading in Pine Script** matching the YAML rubric, included in alert payload | Real-time A+/A/B determination at signal time; required for Q4 forward-test |
 | E4 | **Quarterly auto-refit** harness with promotion-criteria check | Removes Bryce's manual refit loop; makes refinement cheap |
 | E5 | **HTML dashboard** (one-screen visual summary of latest rubric, recent OOS, sample size, detectable effect size; ADHD-friendly per CLAUDE.md) | Allie's daily glance; primary consumption surface |
+| E21 | **Pre-market brief** (07:00 ET): MNQ/NQ key levels (prior-day, overnight, weekly, monthly H/L), overnight trend, volatility + gap-vs-ATR, VIX expected move, today's econ + mega-cap-earnings catalysts. Email push + Sheet/dashboard. Design: `docs/premarket_brief_design.md` | Daily decision context independent of the rubric; forces early resolution of the session-tagged bar-source decision (needs Globex data + settlements). Read-only, no trade-history dependency, so it ships standalone. |
 
 ### 5.2 Medium value
 
